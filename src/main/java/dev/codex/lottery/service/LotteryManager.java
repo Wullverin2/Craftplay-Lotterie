@@ -1626,7 +1626,7 @@ public final class LotteryManager {
         boolean languagePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")));
         boolean adminPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")));
         String itemRoot = statsPage ? "stats-gui.items" : personalStatsPage ? "personal-stats-gui.items" : languagePage ? "language-gui.items" : adminPage ? "admin-gui.items" : "gui.items";
-        String itemPath = findItemPathBySlot(itemRoot, slot);
+        String itemPath = findItemPathBySlot(player, itemRoot, slot);
         if (itemPath == null) {
             return;
         }
@@ -3830,6 +3830,10 @@ public final class LotteryManager {
     }
 
     private void setConfiguredItem(Inventory inventory, Player player, String path) {
+        if (!isGuiItemVisible(player, path)) {
+            return;
+        }
+
         Map<String, String> placeholders = createItemPlaceholders(player, path);
         List<Integer> slots = getGuiSlots(path);
         if (slots.isEmpty()) {
@@ -4124,7 +4128,7 @@ public final class LotteryManager {
         return seasonStats.getOrDefault(playerId, new PlayerLotteryStats(playerId, getCachedPlayerName(playerId)));
     }
 
-    private String findItemPathBySlot(String itemsPath, int clickedSlot) {
+    private String findItemPathBySlot(Player player, String itemsPath, int clickedSlot) {
         ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection(itemsPath);
         if (itemsSection == null) {
             return null;
@@ -4133,11 +4137,41 @@ public final class LotteryManager {
         String matchingPath = null;
         for (String key : itemsSection.getKeys(false)) {
             String path = itemsPath + "." + key;
+            if (!isGuiItemVisible(player, path)) {
+                continue;
+            }
             if (getGuiSlots(path).contains(clickedSlot)) {
                 matchingPath = path;
             }
         }
         return matchingPath;
+    }
+
+    private boolean isGuiItemVisible(Player player, String path) {
+        String permission = plugin.getGuiConfig().getString(path + ".permission",
+            plugin.getGuiConfig().getString(path + ".view-permission", ""));
+        if (permission == null || permission.isBlank()) {
+            permission = inferGuiItemPermission(path);
+        }
+
+        if (permission == null || permission.isBlank() || player.hasPermission(permission)) {
+            return true;
+        }
+        return !plugin.getGuiConfig().getBoolean(path + ".hide-without-permission", true);
+    }
+
+    private String inferGuiItemPermission(String path) {
+        for (String action : plugin.getGuiConfig().getStringList(path + ".actions")) {
+            String normalizedAction = action.trim().toLowerCase(Locale.ROOT);
+            if (normalizedAction.equals("open-admin")
+                || normalizedAction.equals("player:/lottery admin")
+                || normalizedAction.equals("player-command:/lottery admin")
+                || normalizedAction.equals("command:/lottery admin")
+                || normalizedAction.equals("/lottery admin")) {
+                return "lottery.admin";
+            }
+        }
+        return "";
     }
 
     private boolean handleItemActions(Player player, String path) {
