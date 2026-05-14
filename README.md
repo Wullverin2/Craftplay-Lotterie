@@ -1,50 +1,50 @@
 # Craftplay Lotterie
 
-Ein voll ausgestattetes Lotterie-Plugin fuer Paper/Spigot mit Vault, GUI, PlaceholderAPI und Webhook-Support.
+Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderAPI und Webhook-Support.
 
 ## Features
 
-- taegliche automatische Ziehung mit Zeitzone
+- tägliche automatische Ziehung mit Zeitzone
 - Ticketkauf per Befehl und GUI
 - Jackpot mit optionalem Steuerabzug
 - konfigurierbarer Zusatzbetrag im Topf
 - maximale Tickets pro Kauf und pro Spieler
-- Kauf-Cooldown sowie Tageslimits fuer Tickets und Ausgaben
+- Kauf-Cooldown sowie Tageslimits für Tickets und Ausgaben
 - Mindestanzahl an Spielern vor der Ziehung
-- Rueckzahlung der Tickets, wenn wegen zu wenigen Teilnehmern nicht gezogen wird
-- kein Topf-Uebertrag, wenn keine Ziehung stattfindet
+- Rückzahlung der Tickets, wenn wegen zu wenigen Teilnehmern nicht gezogen wird
+- kein Topf-Übertrag, wenn keine Ziehung stattfindet
 - Gewinnerhistorie mit gespeicherten Ticketzahlen
 - Broadcast beim Ticketkauf und beim Gewinn
 - persistente Spielerstatistiken in `data.yml`
 - Statistik-Unterseite im GUI mit Top-10-Listen
-- TextDisplay-Hologramm bis zur naechsten Ziehung
+- TextDisplay-Hologramm bis zur nächsten Ziehung
 - Statistik-Hologramme mit eigenen Templates pro Statistikart
-- anklickbarer Kaufen-Button in der Ziehungsankuendigung
-- Join-Reminder fuer Spieler
+- anklickbarer Kaufen-Button in der Ziehungsankündigung
+- Join-Reminder für Spieler
 - Titel- und Sound-Effekte beim Gewinn
 - PlaceholderAPI-Integration
 - Discord/Webhook-Benachrichtigungen
 - Discord/Webhook-Embeds mit Gewinnerdaten
-- optionale Webhook-Events fuer Ticketkauf und fehlgeschlagene Ziehungen
-- Admin-Befehle fuer Steuerung und Debugging
+- optionale Webhook-Events für Ticketkauf und fehlgeschlagene Ziehungen
+- Admin-Befehle für Steuerung und Debugging
 - Admin-GUI mit Status, Doctor, Simulation, Reload, Reset, Force-Draw und Offline-Nachrichten
 - Admin-Log in `admin-log.yml`
 - Config-Migration mit Backup unter `migrations`
-- optionale SQL-Speicherung per SQLite oder MySQL fuer Snapshots und strukturierte Statistik-Tabellen
-- Retry-System fuer fehlgeschlagene Auszahlungen und Rueckerstattungen
+- optionale SQL-Speicherung per SQLite oder MySQL für Snapshots und strukturierte Statistik-Tabellen
+- Retry-System für fehlgeschlagene Auszahlungen und Rückerstattungen
 - Backup, Auto-Backup nach Ziehungen, Export, Import, Debug und Setup-Befehle
-- mehrere Ziehzeiten pro Tag optional ueber `settings.draw-schedule.multiple-draws-enabled`
-- optionale Wochentags-Regeln fuer Ziehungen
-- optionale Gewinnbefehle ueber `rewards.commands-on-win`
-- optionale gewichtete Gewinnpakete ueber `rewards.packages`
+- mehrere Ziehzeiten pro Tag optional über `settings.draw-schedule.multiple-draws-enabled`
+- optionale Wochentags-Regeln für Ziehungen
+- optionale Gewinnbefehle über `rewards.commands-on-win`
+- optionale gewichtete Gewinnpakete über `rewards.packages`
 - mehrere Gewinner pro Ziehung mit gewichteter Gewinnverteilung
 - Saison-Statistiken mit Reset-Befehl
-- Steuerstatistik fuer eingesammelte Gebuehren
+- Steuerstatistik für eingesammelte Gebühren
 - Jackpot-Boost-Events per Multiplikator
-- Kaufbestaetigung fuer grosse Ticketkaeufe
+- Kaufbestätigung für große Ticketkäufe
 - Teilnahmebedingungen per Permission, Welt und Mindestspielzeit
 - animierte Ziehung mit Countdown
-- Testziehung ohne Auszahlung oder Datenveraenderung
+- Testziehung ohne Auszahlung oder Datenveränderung
 
 ## Commands
 
@@ -119,15 +119,15 @@ Ein voll ausgestattetes Lotterie-Plugin fuer Paper/Spigot mit Vault, GUI, Placeh
 
 ## Konfiguration
 
-- `config.yml` enthaelt Regeln, Preise, Zusatzbetrag, Ziehungszeiten, Webhook, Effekte, Gewinnbefehle und den optionalen Kaufen-Button fuer Ziehungsankuendigungen.
+- `config.yml` enthält Regeln, Preise, Zusatzbetrag, Ziehungszeiten, Webhook, Effekte, Gewinnbefehle und den optionalen Kaufen-Button für Ziehungsankündigungen.
 - `lang/de.yml` und `lang/en.yml` enthalten alle Chat-Nachrichten und Broadcasts.
-- `gui/gui.yml` enthaelt Titel, Slots, Materialien, Namen, Lore und Klick-Aktionen des GUI.
-- `holograms.yml` enthaelt alle Hologramm-Einstellungen und Positionen.
-- `admin-log.yml` wird automatisch erstellt und enthaelt Kaeufe, Ziehungen, Rueckzahlungen und Admin-Aktionen.
+- `gui/gui.yml` enthält Titel, Slots, Materialien, Namen, Lore und Klick-Aktionen des GUI.
+- `holograms.yml` enthält alle Hologramm-Einstellungen und Positionen.
+- `admin-log.yml` wird automatisch erstellt und enthält Käufe, Ziehungen, Rückzahlungen und Admin-Aktionen.
 
 ## Speicher
 
-Standard ist YAML. Optional kann `storage.type` auf `sqlite` oder `mysql` gestellt werden. Das Plugin speichert dann die aktuellen Daten- und Log-Snapshots zusaetzlich in der Datenbank und laedt sie beim Start daraus zurueck. Zusaetzlich werden Runde, Spielerstatistiken, Gewinnerhistorie und offene Zahlungen in separaten Tabellen gespiegelt.
+Standard ist YAML. Optional kann `storage.type` auf `sqlite` oder `mysql` gestellt werden. Das Plugin speichert dann die aktuellen Daten- und Log-Snapshots zusätzlich in der Datenbank und lädt sie beim Start daraus zurück. Zusätzlich werden Runde, Spielerstatistiken, Gewinnerhistorie und offene Zahlungen in separaten Tabellen gespiegelt.
 
 ```yaml
 storage:
@@ -140,9 +140,9 @@ storage:
 - Bei aktivem `backups.auto-after-draw.enabled` wird nach jeder Ziehung automatisch ein ZIP-Backup erstellt.
 - `/lottery export` exportiert `data.yml` nach `exports`.
 - `/lottery import <datei>` importiert nur Dateien aus dem `exports`-Ordner.
-- `/lottery debug` zeigt Storage, Hooks, naechste Ziehung, offene Nachrichten und offene Zahlungen.
-- `/lottery payments retry` versucht fehlgeschlagene Auszahlungen/Rueckerstattungen erneut.
-- `/lottery simulate` zeigt einen moeglichen Gewinner der aktuellen Runde, ohne etwas auszuzahlen oder die Runde zu beenden.
+- `/lottery debug` zeigt Storage, Hooks, nächste Ziehung, offene Nachrichten und offene Zahlungen.
+- `/lottery payments retry` versucht fehlgeschlagene Auszahlungen/Rückerstattungen erneut.
+- `/lottery simulate` zeigt einen möglichen Gewinner der aktuellen Runde, ohne etwas auszuzahlen oder die Runde zu beenden.
 
 ## GUI-Aktionen
 
@@ -160,13 +160,13 @@ In `gui.yml` kann jedes Item eigene Aktionen haben:
 - `language:de`
 - `language:en`
 
-Kaufbuttons nutzen `buy-amount`, Dekoitems haben einfach keine Aktionen. Spielerkoepfe funktionieren ueber `material: "PLAYER_HEAD"` und `skull-owner: "%player_name%"`. PlaceholderAPI-Platzhalter von CMI, Jobs und Quest-Plugins koennen in Namen, Lore, Nachrichten und Befehlen genutzt werden, wenn die jeweilige PlaceholderAPI-Erweiterung installiert ist.
+Kaufbuttons nutzen `buy-amount`, Dekoitems haben einfach keine Aktionen. Spielerköpfe funktionieren über `material: "PLAYER_HEAD"` und `skull-owner: "%player_name%"`. PlaceholderAPI-Platzhalter von CMI, Jobs und Quest-Plugins können in Namen, Lore, Nachrichten und Befehlen genutzt werden, wenn die jeweilige PlaceholderAPI-Erweiterung installiert ist.
 
 ## Hologramme
 
 Hologramme werden in `holograms.yml` gespeichert. Es gibt zwei Typen:
 
-- `countdown` zeigt die Zeit bis zur naechsten Ziehung.
+- `countdown` zeigt die Zeit bis zur nächsten Ziehung.
 - `statistic` zeigt eine Top-10-Statistik.
 
 Befehle:
@@ -177,7 +177,7 @@ Befehle:
 - `/lottery hologram delete <id>`
 - `/lottery hologram list [seite]`
 
-Statistikwerte fuer Hologramme: `rounds_played`, `tickets_bought`, `money_spent`, `wins`, `highest_win`, `total_won`, `current_tickets`.
+Statistikwerte für Hologramme: `rounds_played`, `tickets_bought`, `money_spent`, `wins`, `highest_win`, `total_won`, `current_tickets`.
 In `holograms.yml` kann jede Statistikart unter `templates.statistics.<statistik>` eigene Linien und einen eigenen Anzeigenamen erhalten.
 
 ## Statistik
@@ -185,12 +185,12 @@ In `holograms.yml` kann jede Statistikart unter `templates.statistics.<statistik
 Das Plugin speichert pro Spieler dauerhaft:
 
 - gekaufte Tickets insgesamt
-- Geld fuer Tickets insgesamt
+- Geld für Tickets insgesamt
 - gespielte Runden
 - Anzahl Gewinne
-- hoechster Einzelgewinn
+- höchster Einzelgewinn
 - alle Gewinne zusammen
-- letzte Kaeufe und letzte Gewinne
+- letzte Käufe und letzte Gewinne
 
 Die Statistik-Seite im GUI nutzt Lore-Platzhalter wie `%top_rounds_played%`, `%top_money_spent%`, `%top_wins%`, `%top_highest_win%`, `%top_total_won%` und `%top_current_tickets%`.
 
