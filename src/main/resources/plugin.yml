@@ -10,7 +10,7 @@ description: Craftplay Lotterie with GUI, PlaceholderAPI and webhook support.
 commands:
   lottery:
     description: Main command for the lottery plugin
-    usage: /lottery [help|buy|gui|jackpot|winners|stats|nextdraw|draw|simulate|reload|setjackpot|addjackpot|reset|info|admin|notifications|payments|backup|export|import|debug|doctor|log|setup|season|preview|editor|lotteries]
+    usage: /lottery [help|buy|gui|jackpot|winners|stats|nextdraw|draw|simulate|reload|setjackpot|addjackpot|reset|info|admin|notifications|payments|backup|export|import|debug|doctor|log|setup|season|preview|editor|lotteries|transactions]
     aliases: [lot]
 
 permissions:

@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -19,11 +21,13 @@ import org.bukkit.entity.Player;
 
 public final class LotteryCommand implements CommandExecutor, TabCompleter {
 
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
+
     private static final List<String> SUBCOMMANDS = List.of(
         "help", "buy", "gui", "jackpot", "winners", "stats", "nextdraw",
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
-        "season", "preview", "editor", "lotteries"
+        "season", "preview", "editor", "lotteries", "transactions"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -92,6 +96,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "preview" -> handlePreview(sender, args);
             case "editor" -> handleEditor(sender);
             case "lotteries" -> handleLotteries(sender, args);
+            case "transactions" -> handleTransactions(sender, args);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -130,16 +135,21 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             } else if ("payments".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("retry"));
             } else if ("setup".equals(subcommand) && sender.hasPermission("lottery.admin")) {
-                addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup"));
+                addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup", "type", "fixedprize", "profile"));
             } else if ("season".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("reset"));
             } else if ("preview".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("gui", "draw", "holograms"));
             } else if ("lotteries".equals(subcommand) && sender.hasPermission("lottery.admin")) {
-                addMatching(suggestions, args[1], List.of("list"));
+                addMatching(suggestions, args[1], List.of("list", "select"));
+            } else if ("transactions".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("1", "2", "3"));
             } else if ("log".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("player", "action", "date"));
             }
+        } else if (args.length == 3 && "lotteries".equalsIgnoreCase(args[0])
+            && "select".equalsIgnoreCase(args[1]) && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[2], lotteryManager.getLotteryProfileIds());
         } else if (args.length == 3 && "notifications".equalsIgnoreCase(args[0]) && sender.hasPermission("lottery.admin")) {
             if ("clear".equalsIgnoreCase(args[1])) {
                 addMatching(suggestions, args[2], List.of("all"));
@@ -492,6 +502,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case "winners" -> plugin.getConfig().set("winners.multiple-enabled", Boolean.parseBoolean(value));
                 case "shares" -> plugin.getConfig().set("winners.prize-shares", parseDoubleList(value));
                 case "autobackup" -> plugin.getConfig().set("backups.auto-after-draw.enabled", Boolean.parseBoolean(value));
+                case "type" -> plugin.getConfig().set("settings.lottery-type", value);
+                case "fixedprize" -> plugin.getConfig().set("settings.fixed-prize-amount", Double.parseDouble(value));
+                case "profile" -> {
+                    lotteryManager.setActiveLottery(sender, value);
+                    return true;
+                }
                 default -> {
                     MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.setup-usage");
                     return true;
@@ -567,11 +583,32 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
+
+        if (args.length >= 2 && "select".equalsIgnoreCase(args[1])) {
+            if (args.length < 3) {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.lotteries-usage");
+                return true;
+            }
+            lotteryManager.setActiveLottery(sender, args[2]);
+            return true;
+        }
+
         if (args.length >= 2 && !"list".equalsIgnoreCase(args[1])) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.lotteries-usage");
             return true;
         }
         lotteryManager.listLotteries(sender);
+        return true;
+    }
+
+    private boolean handleTransactions(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+
+        int page = args.length >= 2 ? parsePositiveInt(args[1], 1) : 1;
+        lotteryManager.listTransactions(sender, page);
         return true;
     }
 
@@ -651,21 +688,31 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
 
     private void sendHelp(CommandSender sender) {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-header");
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-status");
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-buy");
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-gui");
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-winners");
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-nextdraw");
+        sendHelpLine(sender, "messages.help-line-status", "/lottery");
+        sendHelpLine(sender, "messages.help-line-buy", "/lottery buy 1");
+        sendHelpLine(sender, "messages.help-line-gui", "/lottery gui");
+        sendHelpLine(sender, "messages.help-line-winners", "/lottery winners");
+        sendHelpLine(sender, "messages.help-line-nextdraw", "/lottery nextdraw");
         if (sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-line-admin");
+            sendHelpLine(sender, "messages.help-line-admin", "/lottery admin");
         }
+    }
+
+    private void sendHelpLine(CommandSender sender, String path, String command) {
+        if (sender instanceof Player player && plugin.getConfig().getBoolean("help.clickable.enabled", true)) {
+            String message = MessageUtil.raw(player, plugin.getMessagesConfig(player), path, Map.of());
+            player.sendMessage(LEGACY_SERIALIZER.deserialize(MessageUtil.color(message))
+                .clickEvent(ClickEvent.runCommand(command)));
+            return;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), path);
     }
 
     private boolean isSubcommandAllowed(CommandSender sender, String subcommand) {
         return switch (subcommand) {
             case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
                 "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
-                "preview", "editor", "lotteries" -> sender.hasPermission("lottery.admin");
+                "preview", "editor", "lotteries", "transactions" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }

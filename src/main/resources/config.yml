@@ -16,6 +16,15 @@ settings:
   # DE: Fester Zusatzbetrag im Topf. Dieser wird nur für die aktuelle Anzeige/Ziehung addiert und nicht übertragen.
   # EN: Fixed base amount in the pot. It is only added for the current display/draw and is not carried over.
   additional-pot-amount: 1000.0
+  # DE: Lotterie-Typ: jackpot zahlt den Topf, fifty_fifty zahlt 50% des Topfs, fixed_prize zahlt einen festen Betrag.
+  # EN: Lottery type: jackpot pays the pot, fifty_fifty pays 50% of the pot, fixed_prize pays a fixed amount.
+  lottery-type: "jackpot"
+  # DE: Fester Gewinnbetrag für lottery-type fixed_prize.
+  # EN: Fixed prize amount for lottery-type fixed_prize.
+  fixed-prize-amount: 1000.0
+  # DE: true begrenzt fixed_prize auf den aktuellen Topf.
+  # EN: true caps fixed_prize to the current pot.
+  fixed-prize-cap-to-pot: true
   # DE: Maximale Ticketanzahl pro Kaufvorgang.
   # EN: Maximum number of tickets per purchase action.
   tickets-per-purchase-max: 64
@@ -133,6 +142,14 @@ security:
   # EN: Admins are warned from this purchase cost. 0 disables this warning.
   admin-warning-spend-threshold: 0.0
 
+transactions:
+  # DE: Aktiviert ein separates Transaktionslog für Käufe, Rückerstattungen und Auszahlungen.
+  # EN: Enables a separate transaction log for purchases, refunds and payouts.
+  enabled: true
+  # DE: Maximale Anzahl gespeicherter Transaktionen.
+  # EN: Maximum number of stored transactions.
+  max-entries: 1000
+
 winners:
   # DE: Aktiviert mehrere Gewinner pro Ziehung.
   # EN: Enables multiple winners per draw.
@@ -180,6 +197,19 @@ seasons:
     # DE: Konsolenbefehle nach dem Saisonreset. Platzhalter: %old_season%, %new_season%.
     # EN: Console commands after the season reset. Placeholders: %old_season%, %new_season%.
     commands-after-reset: []
+  rewards:
+    # DE: Belohnt beim automatischen Saisonwechsel die Top-Spieler der gewählten Statistik.
+    # EN: Rewards top players of the selected statistic during automatic season rotation.
+    enabled: false
+    # DE: Statistik für Saisonbelohnungen: total_won, wins, tickets_bought, money_spent oder rounds_played.
+    # EN: Statistic for season rewards: total_won, wins, tickets_bought, money_spent or rounds_played.
+    statistic: "total_won"
+    # DE: Wie viele Plätze belohnt werden.
+    # EN: How many ranks are rewarded.
+    top-limit: 3
+    # DE: Konsolenbefehle pro belohntem Spieler. Platzhalter: %player%, %rank%, %value%, %old_season%, %new_season%.
+    # EN: Console commands per rewarded player. Placeholders: %player%, %rank%, %value%, %old_season%, %new_season%.
+    commands: []
 
 backups:
   auto-after-draw:
@@ -262,6 +292,17 @@ language:
   # EN: Default language for console and players without a custom selection.
   default: "de"
 
+help:
+  clickable:
+    # DE: Macht /lottery help im Spiel anklickbar.
+    # EN: Makes /lottery help clickable in game.
+    enabled: true
+
+docs:
+  # DE: Erstellt beim Start PLACEHOLDERS.md im Plugin-Ordner.
+  # EN: Creates PLACEHOLDERS.md in the plugin folder on startup.
+  generate-placeholder-docs: true
+
 notifications:
   join-reminder:
     # DE: Sendet Spielern beim Join einen Lotterie-Hinweis.
@@ -315,6 +356,19 @@ webhook:
       # DE: Nachricht für Ticketkauf-Webhooks.
       # EN: Message for ticket purchase webhooks.
       message: "**Ticketkauf:** %player% hat %amount% Ticket(s) für %cost% gekauft. Topf: %pot%"
+      embed:
+        # DE: Aktiviert Discord-Embed für dieses Event.
+        # EN: Enables Discord embed for this event.
+        enabled: false
+        # DE: Embed-Titel.
+        # EN: Embed title.
+        title: "Ticket gekauft"
+        # DE: Embed-Beschreibung.
+        # EN: Embed description.
+        description: "%player% hat %amount% Ticket(s) gekauft. Topf: %pot%"
+        # DE: Embed-Farbe als Dezimalzahl.
+        # EN: Embed color as decimal number.
+        color: 16766720
     draw-not-enough-players:
       # DE: Aktiviert Webhook, wenn zu wenige Spieler dabei waren.
       # EN: Enables webhook when there were not enough players.
@@ -322,6 +376,19 @@ webhook:
       # DE: Nachricht für fehlgeschlagene Ziehungen wegen zu weniger Spieler.
       # EN: Message for failed draws due to not enough players.
       message: "**Lotterie:** Zu wenige Spieler. Rückerstattung: %refunded% an %refunded_players% Spieler."
+      embed:
+        # DE: Aktiviert Discord-Embed für dieses Event.
+        # EN: Enables Discord embed for this event.
+        enabled: false
+        # DE: Embed-Titel.
+        # EN: Embed title.
+        title: "Ziehung abgebrochen"
+        # DE: Embed-Beschreibung.
+        # EN: Embed description.
+        description: "Zu wenige Spieler. Rückerstattung: %refunded%."
+        # DE: Embed-Farbe als Dezimalzahl.
+        # EN: Embed color as decimal number.
+        color: 15158332
     draw-no-players:
       # DE: Aktiviert Webhook, wenn keine Tickets vorhanden waren.
       # EN: Enables webhook when no tickets existed.
@@ -329,6 +396,19 @@ webhook:
       # DE: Nachricht für Ziehungen ohne Teilnehmer.
       # EN: Message for draws without participants.
       message: "**Lotterie:** Keine Tickets vorhanden, Ziehung ohne Gewinner beendet."
+      embed:
+        # DE: Aktiviert Discord-Embed für dieses Event.
+        # EN: Enables Discord embed for this event.
+        enabled: false
+        # DE: Embed-Titel.
+        # EN: Embed title.
+        title: "Keine Teilnehmer"
+        # DE: Embed-Beschreibung.
+        # EN: Embed description.
+        description: "Die Ziehung wurde ohne Gewinner beendet."
+        # DE: Embed-Farbe als Dezimalzahl.
+        # EN: Embed color as decimal number.
+        color: 9807270
 
 announcements:
   draw:

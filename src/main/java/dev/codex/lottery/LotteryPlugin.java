@@ -174,6 +174,72 @@ public final class LotteryPlugin extends JavaPlugin {
         if (getConfig().getBoolean("settings.refund-on-not-enough-players", true)) {
             getLogger().info("Refunds on failed draws are enabled. Make sure your economy supports OfflinePlayer deposits.");
         }
+        generatePlaceholderDocumentation();
+    }
+
+    private void generatePlaceholderDocumentation() {
+        if (!getConfig().getBoolean("docs.generate-placeholder-docs", true)) {
+            return;
+        }
+
+        File docsFile = new File(getDataFolder(), "PLACEHOLDERS.md");
+        String content = """
+            # Craftplay Lotterie Placeholder
+
+            Diese Datei wird automatisch vom Plugin erstellt.
+
+            ## Allgemein
+            - `%lottery_pot%` / `%lottery_jackpot%`
+            - `%lottery_ticket_pot%`
+            - `%lottery_base_pot%`
+            - `%lottery_payout_pot%`
+            - `%lottery_ticket_price%`
+            - `%lottery_draw_time%`
+            - `%lottery_draw_times%`
+            - `%lottery_next_draw%`
+            - `%lottery_time_left%`
+            - `%lottery_total_tickets%`
+            - `%lottery_players%`
+            - `%lottery_min_players%`
+            - `%lottery_winner_count%`
+            - `%lottery_lottery_id%`
+            - `%lottery_lottery_name%`
+            - `%lottery_lottery_type%`
+
+            ## Spieler
+            - `%lottery_player_tickets%`
+            - `%lottery_player_chance%`
+            - `%lottery_player_stats_tickets_bought%`
+            - `%lottery_player_stats_money_spent%`
+            - `%lottery_player_stats_wins%`
+            - `%lottery_player_stats_highest_win%`
+            - `%lottery_player_stats_total_won%`
+            - `%lottery_player_stats_rounds_played%`
+            - `%lottery_player_stats_profit%`
+
+            ## Saison
+            - `%lottery_season_id%`
+            - `%lottery_season_tickets_bought%`
+            - `%lottery_season_money_spent%`
+            - `%lottery_season_wins%`
+            - `%lottery_season_total_won%`
+            - `%lottery_season_profit%`
+
+            ## Toplisten
+            Schema: `%lottery_top_<statistik>_<rang>%`, `%lottery_top_<statistik>_<rang>_name%`, `%lottery_top_<statistik>_<rang>_value%`
+
+            Statistiken: `rounds_played`, `tickets_bought`, `money_spent`, `wins`, `highest_win`, `total_won`, `current_tickets`.
+            """;
+
+        try {
+            if (!getDataFolder().exists() && !getDataFolder().mkdirs()) {
+                getLogger().warning("Could not create plugin data folder for placeholder docs.");
+                return;
+            }
+            Files.writeString(docsFile.toPath(), content, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            getLogger().warning("Could not write PLACEHOLDERS.md: " + exception.getMessage());
+        }
     }
 
     private void migrateConfigIfNeeded() {

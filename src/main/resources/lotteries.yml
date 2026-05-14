@@ -5,6 +5,9 @@ settings:
   # DE: Aktiviert die Profilverwaltung für zukünftige Multi-Lotterie-Setups. false bedeutet: normale Einzel-Lotterie aus config.yml.
   # EN: Enables profile management for future multi-lottery setups. false means: normal single lottery from config.yml.
   enabled: false
+  # DE: Aktives Profil, dessen Werte Ticketpreis, Zusatzbetrag, Mindestspieler, Typ und Ziehzeiten überschreiben können.
+  # EN: Active profile whose values can override ticket price, base amount, minimum players, type and draw times.
+  active-profile: "default"
 
 profiles:
   default:
@@ -26,6 +29,12 @@ profiles:
     # DE: Optionaler Zusatzbetrag für den Topf. -1 bedeutet Wert aus config.yml verwenden.
     # EN: Optional base amount for the pot. -1 means use the value from config.yml.
     additional-pot-amount: -1
+    # DE: Optionale Mindestspielerzahl für dieses Profil. -1 bedeutet Wert aus config.yml verwenden.
+    # EN: Optional minimum player count for this profile. -1 means use the value from config.yml.
+    minimum-players-to-draw: -1
+    # DE: Optionaler Lotterie-Typ für dieses Profil. Leer bedeutet Wert aus config.yml verwenden.
+    # EN: Optional lottery type for this profile. Empty means use the value from config.yml.
+    lottery-type: ""
     # DE: Optionale Ziehzeiten im Format HH:mm. Leer bedeutet Zeitplan aus config.yml verwenden.
     # EN: Optional draw times in HH:mm format. Empty means use the schedule from config.yml.
     draw-times: []

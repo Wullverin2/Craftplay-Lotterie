@@ -340,7 +340,7 @@ admin-gui:
   # DE: Titel des Admin-Menüs. EN: Title of the admin menu.
   title: "&c&lLotterie Admin"
   # DE: Größe des Admin-Menüs. EN: Size of the admin menu.
-  size: 36
+  size: 54
   # DE: Füllmaterial im Admin-Menü. EN: Filler material in the admin menu.
   filler-material: "RED_STAINED_GLASS_PANE"
   # DE: Admin-Buttons für Ziehung, Reload, Reset und Navigation. EN: Admin buttons for draw, reload, reset and navigation.
@@ -428,6 +428,40 @@ admin-gui:
         - "&7Erstellt ein ZIP-Backup."
       actions:
         - "player:/lottery backup"
+    transactions:
+      slot: 28
+      material: "EMERALD"
+      name: "&aTransaktionen"
+      lore:
+        - "&7Zeigt Käufe, Rückzahlungen"
+        - "&7und Auszahlungen im Chat."
+      actions:
+        - "player:/lottery transactions 1"
+    holograms:
+      slot: 29
+      material: "ARMOR_STAND"
+      name: "&eHologramme"
+      lore:
+        - "&7Listet gespeicherte Hologramme."
+      actions:
+        - "player:/lottery hologram list 1"
+    lotteries:
+      slot: 30
+      material: "MAP"
+      name: "&bLotterie-Profile"
+      lore:
+        - "&7Listet Profile aus lotteries.yml."
+      actions:
+        - "player:/lottery lotteries list"
+    placeholder-docs:
+      slot: 32
+      material: "WRITABLE_BOOK"
+      name: "&dPlaceholder-Doku"
+      lore:
+        - "&7Erstellt automatisch PLACEHOLDERS.md"
+        - "&7im Plugin-Ordner."
+      actions:
+        - "message:&dDie Placeholder-Doku liegt im Plugin-Ordner als PLACEHOLDERS.md."
     season-reset:
       slot: 25
       material: "SUNFLOWER"
@@ -437,7 +471,7 @@ admin-gui:
       actions:
         - "player:/lottery season reset"
     back:
-      slot: 31
+      slot: 49
       material: "ARROW"
       name: "&aZurück"
       lore:
@@ -445,7 +479,7 @@ admin-gui:
       actions:
         - "open-main"
     close:
-      slot: 35
+      slot: 53
       material: "BARRIER"
       name: "&cSchließen"
       lore:

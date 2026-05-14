@@ -26,9 +26,14 @@ Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, Placeh
 - Discord/Webhook-Benachrichtigungen
 - Discord/Webhook-Embeds mit Gewinnerdaten
 - optionale Webhook-Events für Ticketkauf und fehlgeschlagene Ziehungen
+- aktive Lotterie-Profile über `lotteries.yml` mit eigenen Preisen, Ziehzeiten und Typen
+- Lotterie-Typen `jackpot`, `fifty_fifty` und `fixed_prize`
 - Admin-Befehle für Steuerung und Debugging
-- Admin-GUI mit Status, Doctor, Simulation, Reload, Reset, Force-Draw und Offline-Nachrichten
+- Admin-GUI mit Status, Doctor, Simulation, Reload, Reset, Force-Draw, Logs, Transaktionen, Hologrammen und Profilen
 - Admin-Log in `admin-log.yml`
+- separates Transaktionslog in `transactions.yml`
+- automatische Placeholder-Doku als `PLACEHOLDERS.md`
+- klickbare Hilfe im Chat
 - Config-Migration mit Backup unter `migrations`
 - optionale SQL-Speicherung per SQLite oder MySQL für Snapshots und strukturierte Statistik-Tabellen
 - Retry-System für fehlgeschlagene Auszahlungen und Rückerstattungen
@@ -73,8 +78,16 @@ Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, Placeh
 - `/lottery debug`
 - `/lottery doctor`
 - `/lottery log [seite]`
+- `/lottery log player <name> [seite]`
+- `/lottery log action <aktion> [seite]`
+- `/lottery log date <yyyy-mm-dd> [seite]`
+- `/lottery transactions [seite]`
+- `/lottery preview <gui|draw|holograms>`
+- `/lottery editor`
+- `/lottery lotteries list`
+- `/lottery lotteries select <profil>`
 - `/lottery setup <price|minplayers|drawtime|adddrawtime|multipledraws> <wert>`
-- `/lottery setup <cooldown|dailytickets|dailyspend|winners|shares|autobackup> <wert>`
+- `/lottery setup <cooldown|dailytickets|dailyspend|winners|shares|autobackup|type|fixedprize|profile> <wert>`
 - `/lottery season reset [saison-id]`
 - `/lottery hologram create <id> countdown`
 - `/lottery hologram create <id> statistic <statistik>`
@@ -85,6 +98,10 @@ Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, Placeh
 ## PlaceholderAPI
 
 - `%lottery_jackpot%`
+- `%lottery_payout_pot%`
+- `%lottery_lottery_id%`
+- `%lottery_lottery_name%`
+- `%lottery_lottery_type%`
 - `%lottery_ticket_price%`
 - `%lottery_draw_time%`
 - `%lottery_next_draw%`
@@ -124,7 +141,10 @@ Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, Placeh
 - `lang/de.yml` und `lang/en.yml` enthalten alle Chat-Nachrichten und Broadcasts.
 - `gui/gui.yml` enthält Titel, Slots, Materialien, Namen, Lore und Klick-Aktionen des GUI.
 - `holograms.yml` enthält alle Hologramm-Einstellungen und Positionen.
+- `lotteries.yml` enthält optionale Lotterie-Profile mit aktiver Profil-Auswahl.
 - `admin-log.yml` wird automatisch erstellt und enthält Käufe, Ziehungen, Rückzahlungen und Admin-Aktionen.
+- `transactions.yml` wird automatisch erstellt und enthält Geldflüsse wie Ticketkäufe, Rückzahlungen und Auszahlungen.
+- `PLACEHOLDERS.md` wird automatisch im Plugin-Ordner erstellt, wenn `docs.generate-placeholder-docs` aktiv ist.
 
 ## Speicher
 
