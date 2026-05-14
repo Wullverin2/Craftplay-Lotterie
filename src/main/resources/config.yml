@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 3
+config-version: 4
 
 settings:
   # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.
@@ -16,8 +16,8 @@ settings:
   # DE: Fester Zusatzbetrag im Topf. Dieser wird nur für die aktuelle Anzeige/Ziehung addiert und nicht übertragen.
   # EN: Fixed base amount in the pot. It is only added for the current display/draw and is not carried over.
   additional-pot-amount: 1000.0
-  # DE: Lotterie-Typ: jackpot zahlt den Topf, fifty_fifty zahlt 50% des Topfs, fixed_prize zahlt einen festen Betrag.
-  # EN: Lottery type: jackpot pays the pot, fifty_fifty pays 50% of the pot, fixed_prize pays a fixed amount.
+  # DE: Lotterie-Typ: jackpot zahlt den Topf, fifty_fifty zahlt 50%, fixed_prize zahlt fest, item nutzt Item-Einsätze.
+  # EN: Lottery type: jackpot pays the pot, fifty_fifty pays 50%, fixed_prize pays fixed, item uses item stakes.
   lottery-type: "jackpot"
   # DE: Fester Gewinnbetrag für lottery-type fixed_prize.
   # EN: Fixed prize amount for lottery-type fixed_prize.
@@ -80,6 +80,77 @@ settings:
   # EN: Refunds ticket costs when there are not enough players for the draw.
   refund-on-not-enough-players: true
 
+pricing:
+  tiered-prices:
+    # DE: Aktiviert Paketpreise. Beispiel: 5 Tickets können günstiger sein als 5 einzelne Tickets.
+    # EN: Enables package prices. Example: 5 tickets can be cheaper than 5 single tickets.
+    enabled: false
+    # DE: true zerlegt nicht exakt passende Mengen in die besten Paketgrößen plus Einzeltickets.
+    # EN: true splits non-exact amounts into the best package sizes plus single tickets.
+    best-fit: true
+    # DE: Gesamtpreis pro Ticketmenge. "5: 1000" bedeutet: 5 Tickets kosten zusammen 1000.
+    # EN: Total price per ticket amount. "5: 1000" means: 5 tickets cost 1000 total.
+    tiers:
+      "5": 1000.0
+      "10": 1800.0
+      "25": 4000.0
+
+tax:
+  target:
+    # DE: Leitet die Ticket-Steuer zusätzlich auf ein Konto oder per Befehl weiter.
+    # EN: Routes ticket tax additionally to an account or via commands.
+    enabled: false
+    # DE: Vault-Kontoname für die Steuer. Leer = nur Befehle ausführen.
+    # EN: Vault account name for tax. Empty = only run commands.
+    account: "Server"
+    # DE: Konsolenbefehle bei Ticket-Steuer. Platzhalter: %player%, %tax%, %pot%.
+    # EN: Console commands on ticket tax. Placeholders: %player%, %tax%, %pot%.
+    commands: []
+
+payout-tax:
+  # DE: Aktiviert einen Abzug vom Gewinn vor der Auszahlung.
+  # EN: Enables a deduction from prize payouts before paying winners.
+  enabled: false
+  # DE: Abzug vom Gewinn als Dezimalwert. 0.10 bedeutet 10%.
+  # EN: Deduction from prize as decimal value. 0.10 means 10%.
+  rate: 0.0
+  # DE: Vault-Kontoname für den Gewinnabzug. Leer = kein Konto, nur Befehle.
+  # EN: Vault account name for payout tax. Empty = no account, only commands.
+  account: "Server"
+  # DE: Konsolenbefehle für den Gewinnabzug. Platzhalter: %gross_amount%, %payout_tax%, %net_amount%.
+  # EN: Console commands for payout tax. Placeholders: %gross_amount%, %payout_tax%, %net_amount%.
+  commands: []
+
+item-lottery:
+  # DE: Aktiviert Tickets gegen Items statt Geld. Alternativ settings.lottery-type auf item setzen.
+  # EN: Enables tickets for items instead of money. Alternatively set settings.lottery-type to item.
+  enabled: false
+  stake:
+    # DE: Material, das pro Ticket abgegeben werden muss.
+    # EN: Material required per ticket.
+    material: "DIAMOND"
+    # DE: Anzahl Items pro Ticket.
+    # EN: Number of items per ticket.
+    amount-per-ticket: 1
+  # DE: Optionaler Geldbetrag, der pro Item-Ticket in den Topf gerechnet wird.
+  # EN: Optional money amount added to the displayed pot per item ticket.
+  money-pot-per-ticket: 0.0
+  prize:
+    item:
+      # DE: Optionales Item, das Gewinner zusätzlich erhalten. amount 0 deaktiviert es.
+      # EN: Optional item winners receive additionally. amount 0 disables it.
+      material: "DIAMOND_BLOCK"
+      # DE: Anzahl des Preis-Items.
+      # EN: Amount of the prize item.
+      amount: 0
+    # DE: Konsolenbefehle für Item-Lotterie-Gewinner. Platzhalter: %player%, %rank%, %tickets%.
+    # EN: Console commands for item lottery winners. Placeholders: %player%, %rank%, %tickets%.
+    commands: []
+  refund:
+    # DE: Konsolenbefehle bei Item-Rückerstattung. Platzhalter: %player%, %player_uuid%, %item_amount%, %item%.
+    # EN: Console commands on item refunds. Placeholders: %player%, %player_uuid%, %item_amount%, %item%.
+    commands: []
+
 storage:
   # DE: Speichertyp. yaml ist einfach, sqlite/mysql sind für größere Server geeignet.
   # EN: Storage type. yaml is simple, sqlite/mysql are useful for larger servers.
@@ -141,6 +212,14 @@ security:
   # DE: Ab diesem Kaufpreis erhalten Admins eine Warnung. 0 deaktiviert diese Warnung.
   # EN: Admins are warned from this purchase cost. 0 disables this warning.
   admin-warning-spend-threshold: 0.0
+
+admin-safety:
+  # DE: Erzwingt eine zweite Bestätigung für gefährliche Admin-Aktionen wie Reset, Force-Draw, Import und Profilwechsel.
+  # EN: Requires a second confirmation for dangerous admin actions like reset, force draw, import and profile switch.
+  confirm-dangerous-actions: true
+  # DE: Zeitfenster für die zweite Bestätigung in Sekunden.
+  # EN: Time window for the second confirmation in seconds.
+  confirm-timeout-seconds: 20
 
 transactions:
   # DE: Aktiviert ein separates Transaktionslog für Käufe, Rückerstattungen und Auszahlungen.
@@ -218,6 +297,17 @@ backups:
     enabled: true
 
 eligibility:
+  players:
+    # DE: Spieler auf dieser Liste dürfen nicht teilnehmen. Namen oder UUIDs sind erlaubt.
+    # EN: Players on this list cannot participate. Names or UUIDs are allowed.
+    blacklist: []
+    whitelist:
+      # DE: Aktiviert eine Spielerliste, nur diese Spieler dürfen teilnehmen.
+      # EN: Enables a player whitelist, only these players may participate.
+      enabled: false
+      # DE: Erlaubte Spieler als Name oder UUID.
+      # EN: Allowed players by name or UUID.
+      players: []
   permission:
     # DE: Aktiviert eine Teilnahme-Berechtigung.
     # EN: Enables a participation permission.
@@ -236,6 +326,99 @@ eligibility:
   # DE: Mindestspielzeit in Minuten, bevor Spieler teilnehmen dürfen. 0 deaktiviert die Prüfung.
   # EN: Minimum playtime in minutes before players may join. 0 disables the check.
   min-playtime-minutes: 0
+  groups:
+    # DE: Aktiviert Gruppen-/Rangprüfung über Permissions wie group.vip, luckperms.group.vip oder cmi.rank.vip.
+    # EN: Enables group/rank checks via permissions like group.vip, luckperms.group.vip or cmi.rank.vip.
+    enabled: false
+    # DE: Spieler in diesen Gruppen werden blockiert.
+    # EN: Players in these groups are blocked.
+    blocked: []
+    # DE: Wenn nicht leer, dürfen nur Spieler in diesen Gruppen teilnehmen.
+    # EN: If not empty, only players in these groups may participate.
+    allowed: []
+
+free-tickets:
+  # DE: Aktiviert kostenlose Tickets über /lottery free [grund].
+  # EN: Enables free tickets via /lottery free [reason].
+  enabled: false
+  reasons:
+    default:
+      # DE: Anzahl kostenloser Tickets.
+      # EN: Number of free tickets.
+      amount: 1
+      # DE: Wartezeit bis zur nächsten Einlösung in Stunden.
+      # EN: Cooldown until the next claim in hours.
+      cooldown-hours: 24
+      # DE: Optional benötigte Permission. Leer deaktiviert die Prüfung.
+      # EN: Optional required permission. Empty disables the check.
+      permission: ""
+      # DE: Mindestspielzeit in Minuten für diese kostenlosen Tickets.
+      # EN: Minimum playtime in minutes for these free tickets.
+      min-playtime-minutes: 0
+      # DE: Geldbetrag, der pro kostenlosem Ticket in den Topf addiert wird.
+      # EN: Money amount added to the pot per free ticket.
+      money-pot-per-ticket: 0.0
+      # DE: Konsolenbefehle nach erfolgreicher Einlösung.
+      # EN: Console commands after a successful claim.
+      commands-on-claim: []
+    playtime:
+      amount: 1
+      cooldown-hours: 24
+      permission: ""
+      min-playtime-minutes: 60
+      money-pot-per-ticket: 0.0
+      commands-on-claim: []
+    jobs:
+      amount: 1
+      cooldown-hours: 24
+      permission: "lottery.free.jobs"
+      min-playtime-minutes: 0
+      money-pot-per-ticket: 0.0
+      commands-on-claim: []
+    quests:
+      amount: 1
+      cooldown-hours: 24
+      permission: "lottery.free.quests"
+      min-playtime-minutes: 0
+      money-pot-per-ticket: 0.0
+      commands-on-claim: []
+    votes:
+      amount: 1
+      cooldown-hours: 24
+      permission: "lottery.free.votes"
+      min-playtime-minutes: 0
+      money-pot-per-ticket: 0.0
+      commands-on-claim: []
+
+season-shop:
+  # DE: Aktiviert Saisonpunkte und /lottery shop.
+  # EN: Enables season points and /lottery shop.
+  enabled: false
+  points:
+    # DE: Punkte pro gekauftem Ticket.
+    # EN: Points per bought ticket.
+    ticket-purchase: 1
+    # DE: Punkte pro eingelöstem Free-Ticket-Paket.
+    # EN: Points per claimed free-ticket package.
+    free-ticket-claim: 1
+    # DE: Punkte pro Teilnahme an einer abgeschlossenen Ziehung.
+    # EN: Points per participation in a finished draw.
+    round-played: 1
+    # DE: Punkte pro Gewinn.
+    # EN: Points per win.
+    win: 10
+  rewards:
+    default:
+      # DE: Anzeigename der Belohnung.
+      # EN: Display name of the reward.
+      name: "Beispiel-Belohnung"
+      # DE: Kosten in Saisonpunkten.
+      # EN: Cost in season points.
+      cost: 10
+      # DE: Konsolenbefehle beim Kauf. Platzhalter: %player%, %reward%, %points%.
+      # EN: Console commands on purchase. Placeholders: %player%, %reward%, %points%.
+      commands:
+        - "eco give %player% 100"
 
 admin-log:
   # DE: Aktiviert das Admin-Log für wichtige Aktionen.

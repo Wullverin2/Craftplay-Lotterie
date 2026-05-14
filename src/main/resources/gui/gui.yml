@@ -106,6 +106,26 @@ gui:
         - "&7Jobs Level: &f%jobsr_user_totallevels%"
         - "&7Quest Fortschritt: &f%quests_player_current_quest_names%"
       actions: []
+    free-ticket:
+      slot: 23
+      material: "TRIPWIRE_HOOK"
+      name: "&aKostenloses Ticket"
+      lore:
+        - "&7Wenn aktiviert, holst du hier"
+        - "&7deine kostenlosen Tickets."
+        - "&aKlicken zum Einlösen"
+      actions:
+        - "player:/lottery free"
+    season-shop:
+      slot: 24
+      material: "SUNFLOWER"
+      name: "&eSaison-Shop"
+      lore:
+        - "&7Deine Punkte: &f%season_points%"
+        - "&7Belohnungen im Chat ansehen."
+        - "&aKlicken zum Öffnen"
+      actions:
+        - "player:/lottery shop"
     personal-statistics:
       slot: 30
       material: "PLAYER_HEAD"
@@ -453,6 +473,15 @@ admin-gui:
         - "&7Listet Profile aus lotteries.yml."
       actions:
         - "player:/lottery lotteries list"
+    export-csv:
+      slot: 31
+      material: "PAPER"
+      name: "&aCSV Export"
+      lore:
+        - "&7Exportiert Statistiken und"
+        - "&7Transaktionen als CSV."
+      actions:
+        - "player:/lottery export csv"
     placeholder-docs:
       slot: 32
       material: "WRITABLE_BOOK"

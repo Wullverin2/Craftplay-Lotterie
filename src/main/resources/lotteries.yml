@@ -1,9 +1,9 @@
-# DE: Diese Datei bereitet mehrere Lotterie-Profile vor. Aktuell nutzt das Plugin standardmäßig das Profil "default"; eigene Profile können hier vorgeplant und dokumentiert werden.
-# EN: This file prepares multiple lottery profiles. The plugin currently uses the "default" profile by default; custom profiles can be planned and documented here.
+# DE: Diese Datei verwaltet mehrere echte Lotterie-Profile. Jedes aktivierte Profil hat eigene Tickets, eigenen Topf, eigene Historie und eigene Ziehzeiten.
+# EN: This file manages multiple real lottery profiles. Every enabled profile has its own tickets, pot, history and draw schedule.
 
 settings:
-  # DE: Aktiviert die Profilverwaltung für zukünftige Multi-Lotterie-Setups. false bedeutet: normale Einzel-Lotterie aus config.yml.
-  # EN: Enables profile management for future multi-lottery setups. false means: normal single lottery from config.yml.
+  # DE: Aktiviert getrennte Lotterie-Profile. false bedeutet: normale Einzel-Lotterie aus config.yml.
+  # EN: Enables separated lottery profiles. false means: normal single lottery from config.yml.
   enabled: false
   # DE: Aktives Profil, dessen Werte Ticketpreis, Zusatzbetrag, Mindestspieler, Typ und Ziehzeiten überschreiben können.
   # EN: Active profile whose values can override ticket price, base amount, minimum players, type and draw times.
@@ -32,8 +32,8 @@ profiles:
     # DE: Optionale Mindestspielerzahl für dieses Profil. -1 bedeutet Wert aus config.yml verwenden.
     # EN: Optional minimum player count for this profile. -1 means use the value from config.yml.
     minimum-players-to-draw: -1
-    # DE: Optionaler Lotterie-Typ für dieses Profil. Leer bedeutet Wert aus config.yml verwenden.
-    # EN: Optional lottery type for this profile. Empty means use the value from config.yml.
+    # DE: Optionaler Lotterie-Typ für dieses Profil: jackpot, fifty_fifty, fixed_prize oder item. Leer nutzt config.yml.
+    # EN: Optional lottery type for this profile: jackpot, fifty_fifty, fixed_prize or item. Empty uses config.yml.
     lottery-type: ""
     # DE: Optionale Ziehzeiten im Format HH:mm. Leer bedeutet Zeitplan aus config.yml verwenden.
     # EN: Optional draw times in HH:mm format. Empty means use the schedule from config.yml.

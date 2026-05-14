@@ -12,6 +12,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -70,13 +71,16 @@ public final class LotteryManager {
 
     private final LotteryPlugin plugin;
     private final EconomyService economyService;
-    private final LotteryRound currentRound = new LotteryRound();
-    private final List<WinnerEntry> winnerHistory = new ArrayList<>();
+    private final Map<String, LotteryRound> lotteryRounds = new HashMap<>();
+    private final Map<String, List<WinnerEntry>> winnerHistories = new HashMap<>();
     private final Map<UUID, PlayerLotteryStats> playerStats = new HashMap<>();
     private final Map<UUID, PlayerLotteryStats> seasonStats = new HashMap<>();
     private final Map<UUID, List<PendingNotification>> pendingNotifications = new HashMap<>();
     private final Map<UUID, PendingPurchase> pendingPurchases = new HashMap<>();
+    private final Map<UUID, PendingAdminAction> pendingAdminActions = new HashMap<>();
     private final Map<UUID, DailyUsage> dailyUsage = new HashMap<>();
+    private final Map<UUID, Map<String, Long>> freeTicketClaims = new HashMap<>();
+    private final Map<UUID, Integer> seasonPoints = new HashMap<>();
     private final Map<UUID, Long> purchaseCooldowns = new HashMap<>();
     private final List<PendingPayment> pendingPayments = new ArrayList<>();
     private final Random random = new Random();
@@ -95,6 +99,8 @@ public final class LotteryManager {
     private BukkitTask paymentRetryTask;
     private final Map<String, TextDisplay> hologramEntities = new HashMap<>();
     private String lastDrawKey;
+    private final Map<String, String> lastDrawKeys = new HashMap<>();
+    private String operationLotteryId;
     private String seasonId;
     private double totalTaxCollected;
 
@@ -135,14 +141,31 @@ public final class LotteryManager {
         loadStatistics();
         loadSeasonStatistics();
         loadDailyUsage();
+        loadFreeTicketClaims();
+        loadSeasonPoints();
         loadPendingNotifications();
         loadPendingPayments();
         loadMetaStats();
+        loadDrawKeys();
+    }
+
+    private void loadDrawKeys() {
+        lastDrawKeys.clear();
         lastDrawKey = dataConfig.getString("last-draw-key");
 
         String storedDate = dataConfig.getString("last-draw-date");
         if ((lastDrawKey == null || lastDrawKey.isBlank()) && storedDate != null && !storedDate.isBlank()) {
             lastDrawKey = storedDate + " 00:00";
+        }
+        if (lastDrawKey != null && !lastDrawKey.isBlank()) {
+            lastDrawKeys.put("default", lastDrawKey);
+        }
+
+        ConfigurationSection drawKeysSection = dataConfig.getConfigurationSection("last-draw-keys");
+        if (drawKeysSection != null) {
+            for (String lotteryId : drawKeysSection.getKeys(false)) {
+                lastDrawKeys.put(normalizeLotteryId(lotteryId), drawKeysSection.getString(lotteryId, ""));
+            }
         }
     }
 
@@ -179,6 +202,40 @@ public final class LotteryManager {
         startPaymentRetryTask();
     }
 
+    private LotteryRound currentRound() {
+        return lotteryRounds.computeIfAbsent(getActiveLotteryId(), ignored -> new LotteryRound());
+    }
+
+    private LotteryRound roundFor(String lotteryId) {
+        return lotteryRounds.computeIfAbsent(normalizeLotteryId(lotteryId), ignored -> new LotteryRound());
+    }
+
+    private List<WinnerEntry> winnerHistory() {
+        return winnerHistories.computeIfAbsent(getActiveLotteryId(), ignored -> new ArrayList<>());
+    }
+
+    private List<WinnerEntry> winnerHistoryFor(String lotteryId) {
+        return winnerHistories.computeIfAbsent(normalizeLotteryId(lotteryId), ignored -> new ArrayList<>());
+    }
+
+    private String normalizeLotteryId(String lotteryId) {
+        if (lotteryId == null || lotteryId.isBlank()) {
+            return "default";
+        }
+        String normalized = lotteryId.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
+        return normalized.isBlank() ? "default" : normalized;
+    }
+
+    private <T> T withLotteryContext(String lotteryId, java.util.function.Supplier<T> supplier) {
+        String previousLotteryId = operationLotteryId;
+        operationLotteryId = normalizeLotteryId(lotteryId);
+        try {
+            return supplier.get();
+        } finally {
+            operationLotteryId = previousLotteryId;
+        }
+    }
+
     public void showStatus(CommandSender sender) {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.status", createCommonPlaceholders(sender instanceof Player player ? player : null));
         if (sender instanceof Player player) {
@@ -188,15 +245,15 @@ public final class LotteryManager {
     }
 
     public void showWinners(CommandSender sender) {
-        if (winnerHistory.isEmpty()) {
+        if (winnerHistory().isEmpty()) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-winners");
             return;
         }
 
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.winners-header");
-        int limit = Math.min(winnerHistory.size(), plugin.getConfig().getInt("settings.history-size", 10));
+        int limit = Math.min(winnerHistory().size(), plugin.getConfig().getInt("settings.history-size", 10));
         for (int index = 0; index < limit; index++) {
-            WinnerEntry entry = winnerHistory.get(index);
+            WinnerEntry entry = winnerHistory().get(index);
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.winner-entry", Map.of(
                 "player", entry.playerName(),
                 "amount", economyService.format(entry.amount()),
@@ -349,6 +406,75 @@ public final class LotteryManager {
         ));
     }
 
+    public void exportCsv(CommandSender sender) {
+        save();
+        File exportFolder = new File(plugin.getDataFolder(), "exports");
+        if (!exportFolder.exists() && !exportFolder.mkdirs()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.export-failed");
+            return;
+        }
+
+        String stamp = LocalDateTime.now(getZoneId()).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        File statsFile = new File(exportFolder, "lottery-stats-" + stamp + ".csv");
+        File transactionsFile = new File(exportFolder, "lottery-transactions-" + stamp + ".csv");
+        try {
+            Files.writeString(statsFile.toPath(), buildStatsCsv(), StandardCharsets.UTF_8);
+            Files.writeString(transactionsFile.toPath(), buildTransactionsCsv(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Could not export lottery CSV data: " + exception.getMessage());
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.export-failed");
+            return;
+        }
+
+        appendLog("export_csv", Map.of("stats", statsFile.getName(), "transactions", transactionsFile.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.export-csv-created", Map.of(
+            "stats", statsFile.getAbsolutePath(),
+            "transactions", transactionsFile.getAbsolutePath()
+        ));
+    }
+
+    private String buildStatsCsv() {
+        StringBuilder builder = new StringBuilder("uuid,name,tickets_bought,money_spent,wins,highest_win,total_won,rounds_played,last_purchase_at,last_win_at,season_points\n");
+        for (PlayerLotteryStats stats : playerStats.values().stream()
+            .sorted(Comparator.comparing(stats -> stats.getPlayerName() == null ? "" : stats.getPlayerName(), String.CASE_INSENSITIVE_ORDER))
+            .toList()) {
+            builder.append(csv(stats.getPlayerId().toString())).append(',')
+                .append(csv(stats.getPlayerName())).append(',')
+                .append(stats.getTicketsBought()).append(',')
+                .append(stats.getMoneySpent()).append(',')
+                .append(stats.getWins()).append(',')
+                .append(stats.getHighestWin()).append(',')
+                .append(stats.getTotalWon()).append(',')
+                .append(stats.getRoundsPlayed()).append(',')
+                .append(csv(stats.getLastPurchaseAt() == null ? "" : stats.getLastPurchaseAt().toString())).append(',')
+                .append(csv(stats.getLastWinAt() == null ? "" : stats.getLastWinAt().toString())).append(',')
+                .append(getSeasonPoints(stats.getPlayerId())).append('\n');
+        }
+        return builder.toString();
+    }
+
+    private String buildTransactionsCsv() {
+        StringBuilder builder = new StringBuilder("time,type,player,amount,details\n");
+        ConfigurationSection entriesSection = transactionConfig.getConfigurationSection("entries");
+        if (entriesSection == null) {
+            return builder.toString();
+        }
+        for (String key : entriesSection.getKeys(false).stream().sorted().toList()) {
+            String path = "entries." + key;
+            builder.append(csv(transactionConfig.getString(path + ".time", ""))).append(',')
+                .append(csv(transactionConfig.getString(path + ".type", ""))).append(',')
+                .append(csv(transactionConfig.getString(path + ".player", ""))).append(',')
+                .append(csv(transactionConfig.getString(path + ".amount", ""))).append(',')
+                .append(csv(transactionConfig.getString(path + ".details", ""))).append('\n');
+        }
+        return builder.toString();
+    }
+
+    private String csv(String value) {
+        String sanitized = value == null ? "" : value;
+        return "\"" + sanitized.replace("\"", "\"\"") + "\"";
+    }
+
     public void importData(CommandSender sender, String fileName) {
         File exportFolder = new File(plugin.getDataFolder(), "exports");
         File importFile = new File(exportFolder, fileName);
@@ -365,8 +491,14 @@ public final class LotteryManager {
             loadRound();
             loadHistory();
             loadStatistics();
+            loadSeasonStatistics();
+            loadDailyUsage();
+            loadFreeTicketClaims();
+            loadSeasonPoints();
             loadPendingNotifications();
             loadPendingPayments();
+            loadMetaStats();
+            loadDrawKeys();
             save();
         } catch (IOException exception) {
             plugin.getLogger().warning("Could not import lottery data: " + exception.getMessage());
@@ -387,7 +519,7 @@ public final class LotteryManager {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "PlaceholderAPI", "value", Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI") ? "enabled" : "missing"));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "HeadDatabase", "value", Bukkit.getPluginManager().isPluginEnabled("HeadDatabase") ? "enabled" : "missing"));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Next draw", "value", formatNextDraw()));
-        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Tickets", "value", String.valueOf(currentRound.getTotalTickets())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Tickets", "value", String.valueOf(currentRound().getTotalTickets())));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Winner shares", "value", getPrizeShares().toString()));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Season", "value", getSeasonId()));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Lottery profile", "value", getActiveLotteryId()));
@@ -483,6 +615,51 @@ public final class LotteryManager {
         }
 
         List<String> keys = entriesSection.getKeys(false).stream().sorted(Comparator.reverseOrder()).toList();
+        sendTransactionEntries(sender, keys, requestedPage, "/lottery transactions");
+    }
+
+    public void searchTransactions(CommandSender sender, String filterType, String value, int requestedPage) {
+        ConfigurationSection entriesSection = transactionConfig.getConfigurationSection("entries");
+        if (entriesSection == null || entriesSection.getKeys(false).isEmpty()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.transactions-empty");
+            return;
+        }
+
+        String normalizedFilter = filterType.toLowerCase(Locale.ROOT);
+        String normalizedValue = value.toLowerCase(Locale.ROOT);
+        List<String> keys = entriesSection.getKeys(false).stream()
+            .filter(key -> matchesTransactionFilter(key, normalizedFilter, normalizedValue))
+            .sorted(Comparator.reverseOrder())
+            .toList();
+        if (keys.isEmpty()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.transactions-search-empty", Map.of(
+                "filter", filterType,
+                "value", value
+            ));
+            return;
+        }
+
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.transactions-search-header", Map.of(
+            "filter", filterType,
+            "value", value
+        ));
+        sendTransactionEntries(sender, keys, requestedPage, "/lottery transactions filter " + filterType + " " + value);
+    }
+
+    private boolean matchesTransactionFilter(String key, String filterType, String value) {
+        String path = "entries." + key;
+        return switch (filterType) {
+            case "player", "spieler" -> transactionConfig.getString(path + ".player", "").toLowerCase(Locale.ROOT).contains(value);
+            case "type", "typ" -> transactionConfig.getString(path + ".type", "").toLowerCase(Locale.ROOT).contains(value);
+            case "date", "datum" -> transactionConfig.getString(path + ".time", "").toLowerCase(Locale.ROOT).startsWith(value);
+            case "details", "detail" -> transactionConfig.getString(path + ".details", "").toLowerCase(Locale.ROOT).contains(value);
+            default -> transactionConfig.getString(path + ".player", "").toLowerCase(Locale.ROOT).contains(value)
+                || transactionConfig.getString(path + ".type", "").toLowerCase(Locale.ROOT).contains(value)
+                || transactionConfig.getString(path + ".details", "").toLowerCase(Locale.ROOT).contains(value);
+        };
+    }
+
+    private void sendTransactionEntries(CommandSender sender, List<String> keys, int requestedPage, String commandPrefix) {
         int pageSize = 5;
         int maxPage = Math.max(1, (int) Math.ceil(keys.size() / (double) pageSize));
         int page = Math.max(1, Math.min(requestedPage, maxPage));
@@ -502,6 +679,33 @@ public final class LotteryManager {
                 "details", transactionConfig.getString(path + ".details", "")
             ));
         }
+        sendTransactionNavigation(sender, page, maxPage, commandPrefix);
+    }
+
+    private void sendTransactionNavigation(CommandSender sender, int page, int maxPage, String commandPrefix) {
+        if (maxPage <= 1) {
+            return;
+        }
+
+        Component navigation = Component.empty();
+        boolean hasButton = false;
+        if (page > 1) {
+            navigation = navigation.append(legacy(MessageUtil.raw(sender instanceof Player player ? player : null,
+                    plugin.getMessagesConfig(sender), "messages.log-list-previous", Map.of("page", String.valueOf(page - 1))))
+                .clickEvent(ClickEvent.runCommand(commandPrefix + " " + (page - 1))));
+            hasButton = true;
+        }
+
+        if (page < maxPage) {
+            if (hasButton) {
+                navigation = navigation.append(Component.space());
+            }
+            navigation = navigation.append(legacy(MessageUtil.raw(sender instanceof Player player ? player : null,
+                    plugin.getMessagesConfig(sender), "messages.log-list-next", Map.of("page", String.valueOf(page + 1))))
+                .clickEvent(ClickEvent.runCommand(commandPrefix + " " + (page + 1))));
+        }
+
+        sender.sendMessage(navigation);
     }
 
     public void searchAdminLog(CommandSender sender, String filterType, String value, int requestedPage) {
@@ -610,12 +814,22 @@ public final class LotteryManager {
 
     public void resetSeason(CommandSender sender, String requestedSeasonId) {
         seasonStats.clear();
+        seasonPoints.clear();
         seasonId = requestedSeasonId == null || requestedSeasonId.isBlank() ? defaultSeasonId() : requestedSeasonId;
         plugin.getConfig().set("seasons.current-id", seasonId);
         plugin.saveConfig();
         save();
         appendLog("season_reset", Map.of("season", seasonId));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.season-reset", Map.of("season", seasonId));
+    }
+
+    private void addSeasonPoints(UUID playerId, String playerName, int points) {
+        if (points <= 0 || !plugin.getConfig().getBoolean("season-shop.enabled", false)) {
+            return;
+        }
+
+        seasonPoints.merge(playerId, points, Integer::sum);
+        getOrCreateStats(playerId, playerName);
     }
 
     public PurchaseResult buyTickets(Player player, int amount) {
@@ -642,7 +856,8 @@ public final class LotteryManager {
             ));
         }
 
-        double fullCost = amount * getTicketPrice();
+        boolean itemLottery = isItemLottery();
+        double fullCost = itemLottery ? 0.0D : calculateTicketCost(amount);
         PurchaseResult securityResult = validatePurchaseSecurity(player, amount, fullCost);
         if (securityResult != null) {
             return securityResult;
@@ -653,24 +868,35 @@ public final class LotteryManager {
             return confirmationResult;
         }
 
-        if (!economyService.has(player, fullCost) || !economyService.withdraw(player, fullCost)) {
+        if (itemLottery) {
+            if (!removeItemLotteryStake(player, amount)) {
+                return new PurchaseResult(false, "messages.item-stake-missing", Map.of(
+                    "amount", String.valueOf(getItemLotteryStakeAmount() * amount),
+                    "item", getItemLotteryStakeMaterial().name()
+                ));
+            }
+        } else if (!economyService.has(player, fullCost) || !economyService.withdraw(player, fullCost)) {
             return new PurchaseResult(false, "messages.not-enough-money", Map.of(
                 "cost", economyService.format(fullCost)
             ));
         }
 
-        double taxRate = getTaxRate();
+        double taxRate = itemLottery ? 0.0D : getTaxRate();
         double netTicketAmount = fullCost * (1.0D - taxRate);
-        double jackpotIncrease = netTicketAmount * getJackpotBoostMultiplier();
+        double jackpotIncrease = itemLottery
+            ? plugin.getConfig().getDouble("item-lottery.money-pot-per-ticket", 0.0D) * amount
+            : netTicketAmount * getJackpotBoostMultiplier();
         double taxAmount = fullCost - netTicketAmount;
-        currentRound.addTickets(player.getUniqueId(), amount, jackpotIncrease);
+        currentRound().addTickets(player.getUniqueId(), amount, jackpotIncrease, fullCost);
         totalTaxCollected += taxAmount;
+        routeTicketTax(player, taxAmount);
         recordDailyUsage(player.getUniqueId(), amount, fullCost);
         purchaseCooldowns.put(player.getUniqueId(), System.currentTimeMillis());
         getOrCreateStats(player.getUniqueId(), player.getName())
             .recordPurchase(player.getName(), amount, fullCost, LocalDateTime.now(getZoneId()));
         getOrCreateSeasonStats(player.getUniqueId(), player.getName())
             .recordPurchase(player.getName(), amount, fullCost, LocalDateTime.now(getZoneId()));
+        addSeasonPoints(player.getUniqueId(), player.getName(), amount * plugin.getConfig().getInt("season-shop.points.ticket-purchase", 0));
         appendLog("ticket_purchase", Map.of(
             "player", player.getName(),
             "amount", String.valueOf(amount),
@@ -688,12 +914,161 @@ public final class LotteryManager {
         placeholders.put("cost", economyService.format(fullCost));
         placeholders.put("tax", economyService.format(taxAmount));
         placeholders.put("boost_multiplier", formatDecimal(getJackpotBoostMultiplier()));
+        placeholders.put("stake_amount", String.valueOf(getItemLotteryStakeAmount() * amount));
+        placeholders.put("stake_item", getItemLotteryStakeMaterial().name());
         notifyAdminsAboutLargePurchase(player, amount, fullCost, placeholders);
         if (plugin.getConfig().getBoolean("settings.broadcast-ticket-purchases", true)) {
             broadcastConfigured("messages.ticket-purchase-broadcast", placeholders, player);
         }
         sendWebhookEvent("ticket-purchase", placeholders);
-        return new PurchaseResult(true, "messages.buy-success", placeholders);
+        return new PurchaseResult(true, itemLottery ? "messages.buy-success-items" : "messages.buy-success", placeholders);
+    }
+
+    public PurchaseResult claimFreeTickets(Player player, String requestedReason) {
+        if (!plugin.getConfig().getBoolean("free-tickets.enabled", false)) {
+            return new PurchaseResult(false, "messages.free-tickets-disabled", Map.of());
+        }
+
+        String eligibilityMessage = validateEligibility(player);
+        if (eligibilityMessage != null) {
+            return new PurchaseResult(false, eligibilityMessage, Map.of());
+        }
+
+        String reason = normalizeConfigKey(requestedReason == null || requestedReason.isBlank() ? "default" : requestedReason);
+        String path = "free-tickets.reasons." + reason;
+        if (!plugin.getConfig().isConfigurationSection(path)) {
+            path = "free-tickets.reasons.default";
+            reason = "default";
+        }
+
+        String permission = plugin.getConfig().getString(path + ".permission", "");
+        if (permission != null && !permission.isBlank() && !player.hasPermission(permission)) {
+            return new PurchaseResult(false, "messages.no-permission", Map.of());
+        }
+
+        int minPlaytimeMinutes = plugin.getConfig().getInt(path + ".min-playtime-minutes", 0);
+        if (minPlaytimeMinutes > 0 && player.getStatistic(Statistic.PLAY_ONE_MINUTE) < minPlaytimeMinutes * 60 * 20) {
+            return new PurchaseResult(false, "messages.free-tickets-playtime", Map.of(
+                "minutes", String.valueOf(minPlaytimeMinutes)
+            ));
+        }
+
+        long now = System.currentTimeMillis();
+        long cooldownMillis = Math.max(0L, plugin.getConfig().getLong(path + ".cooldown-hours", 24L)) * 60L * 60L * 1000L;
+        long lastClaim = freeTicketClaims.getOrDefault(player.getUniqueId(), Map.of()).getOrDefault(reason, 0L);
+        long remainingMillis = lastClaim + cooldownMillis - now;
+        if (remainingMillis > 0L) {
+            long hours = Math.max(1L, (long) Math.ceil(remainingMillis / 3_600_000.0D));
+            return new PurchaseResult(false, "messages.free-tickets-cooldown", Map.of(
+                "hours", String.valueOf(hours)
+            ));
+        }
+
+        int amount = Math.max(1, plugin.getConfig().getInt(path + ".amount", 1));
+        int maxPerPlayer = plugin.getConfig().getInt("settings.tickets-per-player-max", 256);
+        int currentTickets = getTicketsFor(player.getUniqueId());
+        if (currentTickets + amount > maxPerPlayer) {
+            return new PurchaseResult(false, "messages.player-limit-reached", Map.of(
+                "max", String.valueOf(maxPerPlayer),
+                "tickets", String.valueOf(currentTickets)
+            ));
+        }
+
+        double potAdd = plugin.getConfig().getDouble(path + ".money-pot-per-ticket", 0.0D) * amount;
+        currentRound().addTickets(player.getUniqueId(), amount, potAdd, 0.0D);
+        freeTicketClaims.computeIfAbsent(player.getUniqueId(), ignored -> new HashMap<>()).put(reason, now);
+        getOrCreateStats(player.getUniqueId(), player.getName()).recordPurchase(player.getName(), amount, 0.0D, LocalDateTime.now(getZoneId()));
+        getOrCreateSeasonStats(player.getUniqueId(), player.getName()).recordPurchase(player.getName(), amount, 0.0D, LocalDateTime.now(getZoneId()));
+        addSeasonPoints(player.getUniqueId(), player.getName(), plugin.getConfig().getInt("season-shop.points.free-ticket-claim", 0));
+        appendTransaction("free_ticket_claim", player.getName(), 0.0D, Map.of(
+            "tickets", String.valueOf(amount),
+            "reason", reason,
+            "lottery", getActiveLotteryId()
+        ));
+        for (String command : plugin.getConfig().getStringList(path + ".commands-on-claim")) {
+            String resolvedCommand = MessageUtil.format(player, command, createCommonPlaceholders(player));
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+        save();
+
+        Map<String, String> placeholders = createCommonPlaceholders(player);
+        placeholders.put("amount", String.valueOf(amount));
+        placeholders.put("reason", reason);
+        return new PurchaseResult(true, "messages.free-tickets-success", placeholders);
+    }
+
+    public void showSeasonShop(CommandSender sender) {
+        if (!plugin.getConfig().getBoolean("season-shop.enabled", false)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.season-shop-disabled");
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return;
+        }
+
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-header", Map.of(
+            "points", String.valueOf(getSeasonPoints(player.getUniqueId()))
+        ));
+
+        ConfigurationSection rewardsSection = plugin.getConfig().getConfigurationSection("season-shop.rewards");
+        if (rewardsSection == null || rewardsSection.getKeys(false).isEmpty()) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-empty");
+            return;
+        }
+        for (String id : rewardsSection.getKeys(false).stream().sorted().toList()) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-entry", Map.of(
+                "id", id,
+                "name", rewardsSection.getString(id + ".name", id),
+                "cost", String.valueOf(rewardsSection.getInt(id + ".cost", 0))
+            ));
+        }
+    }
+
+    public void buySeasonShopReward(Player player, String rewardId) {
+        if (!plugin.getConfig().getBoolean("season-shop.enabled", false)) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-disabled");
+            return;
+        }
+
+        String id = normalizeConfigKey(rewardId);
+        String path = "season-shop.rewards." + id;
+        if (!plugin.getConfig().isConfigurationSection(path)) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-not-found", Map.of("id", rewardId));
+            return;
+        }
+
+        int cost = Math.max(0, plugin.getConfig().getInt(path + ".cost", 0));
+        int points = getSeasonPoints(player.getUniqueId());
+        if (points < cost) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-not-enough", Map.of(
+                "points", String.valueOf(points),
+                "cost", String.valueOf(cost)
+            ));
+            return;
+        }
+
+        seasonPoints.put(player.getUniqueId(), points - cost);
+        Map<String, String> placeholders = createCommonPlaceholders(player);
+        placeholders.put("reward", plugin.getConfig().getString(path + ".name", id));
+        placeholders.put("reward_id", id);
+        placeholders.put("cost", String.valueOf(cost));
+        placeholders.put("points", String.valueOf(points - cost));
+        for (String command : plugin.getConfig().getStringList(path + ".commands")) {
+            String resolvedCommand = MessageUtil.format(player, command, placeholders);
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+        appendTransaction("season_shop_buy", player.getName(), 0.0D, Map.of(
+            "reward", id,
+            "cost", String.valueOf(cost),
+            "lottery", getActiveLotteryId()
+        ));
+        save();
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.season-shop-bought", placeholders);
     }
 
     private void notifyAdminsAboutLargePurchase(Player player, int amount, double fullCost, Map<String, String> placeholders) {
@@ -715,6 +1090,76 @@ public final class LotteryManager {
             "amount", String.valueOf(amount),
             "cost", economyService.format(fullCost)
         ));
+    }
+
+    private void routeTicketTax(Player player, double taxAmount) {
+        if (taxAmount <= 0.0D || !plugin.getConfig().getBoolean("tax.target.enabled", false)) {
+            return;
+        }
+
+        Map<String, String> placeholders = new HashMap<>(createCommonPlaceholders(player));
+        placeholders.put("tax", economyService.format(taxAmount));
+        placeholders.put("tax_raw", String.valueOf(taxAmount));
+
+        String account = plugin.getConfig().getString("tax.target.account", "");
+        if (account != null && !account.isBlank()) {
+            economyService.deposit(Bukkit.getOfflinePlayer(account), taxAmount);
+            appendTransaction("ticket_tax", account, taxAmount, Map.of(
+                "source", player.getName(),
+                "lottery", getActiveLotteryId()
+            ));
+        }
+
+        for (String command : plugin.getConfig().getStringList("tax.target.commands")) {
+            String resolvedCommand = MessageUtil.format(player, command, placeholders);
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+    }
+
+    private boolean isItemLottery() {
+        return getLotteryType().equalsIgnoreCase("item") || plugin.getConfig().getBoolean("item-lottery.enabled", false);
+    }
+
+    private Material getItemLotteryStakeMaterial() {
+        return parseMaterial(plugin.getConfig().getString("item-lottery.stake.material", "DIAMOND"), Material.DIAMOND);
+    }
+
+    private int getItemLotteryStakeAmount() {
+        return Math.max(1, plugin.getConfig().getInt("item-lottery.stake.amount-per-ticket", 1));
+    }
+
+    private boolean removeItemLotteryStake(Player player, int tickets) {
+        int required = getItemLotteryStakeAmount() * tickets;
+        Material material = getItemLotteryStakeMaterial();
+        int available = 0;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (stack != null && stack.getType() == material) {
+                available += stack.getAmount();
+            }
+        }
+        if (available < required) {
+            return false;
+        }
+
+        int remaining = required;
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length && remaining > 0; slot++) {
+            ItemStack stack = contents[slot];
+            if (stack == null || stack.getType() != material) {
+                continue;
+            }
+            int remove = Math.min(remaining, stack.getAmount());
+            stack.setAmount(stack.getAmount() - remove);
+            remaining -= remove;
+            if (stack.getAmount() <= 0) {
+                player.getInventory().setItem(slot, null);
+            } else {
+                player.getInventory().setItem(slot, stack);
+            }
+        }
+        return true;
     }
 
     private PurchaseResult validatePurchaseSecurity(Player player, int amount, double fullCost) {
@@ -798,12 +1243,12 @@ public final class LotteryManager {
 
     public DrawResult simulateDraw(CommandSender sender) {
         Map<String, String> placeholders = createCommonPlaceholders(sender instanceof Player player ? player : null);
-        if (currentRound.getTotalTickets() <= 0) {
+        if (currentRound().getTotalTickets() <= 0) {
             return new DrawResult(true, "messages.simulate-no-players", placeholders);
         }
 
-        if (currentRound.getUniquePlayers() < getMinimumPlayers()) {
-            placeholders.put("needed", String.valueOf(getMinimumPlayers() - currentRound.getUniquePlayers()));
+        if (currentRound().getUniquePlayers() < getMinimumPlayers()) {
+            placeholders.put("needed", String.valueOf(getMinimumPlayers() - currentRound().getUniquePlayers()));
             return new DrawResult(true, "messages.simulate-not-enough-players", placeholders);
         }
 
@@ -812,7 +1257,7 @@ public final class LotteryManager {
         placeholders.put("player", mainWinner.playerName());
         placeholders.put("amount", economyService.format(mainWinner.amount()));
         placeholders.put("tickets", String.valueOf(mainWinner.tickets()));
-        placeholders.put("chance", formatChance((double) mainWinner.tickets() / Math.max(1, currentRound.getTotalTickets())));
+        placeholders.put("chance", formatChance((double) mainWinner.tickets() / Math.max(1, currentRound().getTotalTickets())));
         placeholders.put("winner_count", String.valueOf(payouts.size()));
         placeholders.put("winners", formatWinnerPayouts(payouts));
         appendLog("simulate_draw", Map.of(
@@ -828,15 +1273,15 @@ public final class LotteryManager {
     }
 
     public int getTicketsFor(UUID playerId) {
-        return currentRound.getTicketsFor(playerId);
+        return currentRound().getTicketsFor(playerId);
     }
 
     public double getWinChance(UUID playerId) {
-        int totalTickets = currentRound.getTotalTickets();
+        int totalTickets = currentRound().getTotalTickets();
         if (totalTickets <= 0) {
             return 0.0D;
         }
-        return (double) currentRound.getTicketsFor(playerId) / totalTickets;
+        return (double) currentRound().getTicketsFor(playerId) / totalTickets;
     }
 
     public Map<String, String> createCommonPlaceholders(Player player) {
@@ -844,7 +1289,7 @@ public final class LotteryManager {
         placeholders.put("jackpot", economyService.format(getTotalPot()));
         placeholders.put("pot", economyService.format(getTotalPot()));
         placeholders.put("payout_pot", economyService.format(getDrawPayoutAmount()));
-        placeholders.put("ticket_pot", economyService.format(currentRound.getJackpot()));
+        placeholders.put("ticket_pot", economyService.format(currentRound().getJackpot()));
         placeholders.put("base_pot", economyService.format(getConfiguredBasePot()));
         placeholders.put("ticket_price", economyService.format(getTicketPrice()));
         placeholders.put("lottery_id", getActiveLotteryId());
@@ -854,20 +1299,20 @@ public final class LotteryManager {
         placeholders.put("draw_times", formatDrawTimes());
         placeholders.put("next_draw", formatNextDraw());
         placeholders.put("time_left", TimeUtil.formatDurationCompact(Duration.between(ZonedDateTime.now(getZoneId()), getNextDrawAt())));
-        placeholders.put("tickets_total", String.valueOf(currentRound.getTotalTickets()));
-        placeholders.put("players", String.valueOf(currentRound.getUniquePlayers()));
+        placeholders.put("tickets_total", String.valueOf(currentRound().getTotalTickets()));
+        placeholders.put("players", String.valueOf(currentRound().getUniquePlayers()));
         placeholders.put("min_players", String.valueOf(getMinimumPlayers()));
         placeholders.put("pending_notifications", String.valueOf(getPendingNotificationCount()));
         placeholders.put("pending_payments", String.valueOf(pendingPayments.size()));
         placeholders.put("tax_collected_total", economyService.format(totalTaxCollected));
         placeholders.put("season_id", getSeasonId());
-        placeholders.put("round_started", currentRound.getStartedAt().format(WINNER_DATE_FORMAT));
+        placeholders.put("round_started", currentRound().getStartedAt().format(WINNER_DATE_FORMAT));
         placeholders.put("tax_percent", String.valueOf((int) Math.round(getTaxRate() * 100.0D)));
         placeholders.put("boost_multiplier", formatDecimal(getJackpotBoostMultiplier()));
-        placeholders.put("ticket_price_1", economyService.format(getTicketPrice()));
-        placeholders.put("ticket_price_5", economyService.format(getTicketPrice() * 5));
-        placeholders.put("ticket_price_10", economyService.format(getTicketPrice() * 10));
-        placeholders.put("ticket_price_25", economyService.format(getTicketPrice() * 25));
+        placeholders.put("ticket_price_1", economyService.format(calculateTicketCost(1)));
+        placeholders.put("ticket_price_5", economyService.format(calculateTicketCost(5)));
+        placeholders.put("ticket_price_10", economyService.format(calculateTicketCost(10)));
+        placeholders.put("ticket_price_25", economyService.format(calculateTicketCost(25)));
         placeholders.put("winner_count", String.valueOf(getPrizeShares().size()));
         if (player != null) {
             placeholders.put("player", player.getName());
@@ -877,6 +1322,7 @@ public final class LotteryManager {
             placeholders.put("player_tickets", String.valueOf(getTicketsFor(player.getUniqueId())));
             placeholders.put("chance", formatChance(getWinChance(player.getUniqueId())));
             placeholders.put("player_chance", formatChance(getWinChance(player.getUniqueId())));
+            placeholders.put("season_points", String.valueOf(getSeasonPoints(player.getUniqueId())));
             applyPersonalStatsPlaceholders(placeholders, player.getUniqueId());
             applySeasonStatsPlaceholders(placeholders, player.getUniqueId());
         } else {
@@ -887,6 +1333,7 @@ public final class LotteryManager {
             placeholders.put("player_tickets", "0");
             placeholders.put("chance", "0.00%");
             placeholders.put("player_chance", "0.00%");
+            placeholders.put("season_points", "0");
             applyEmptyPersonalStatsPlaceholders(placeholders);
             applyEmptySeasonStatsPlaceholders(placeholders);
         }
@@ -940,21 +1387,46 @@ public final class LotteryManager {
     }
 
     public void setJackpot(double amount) {
-        currentRound.setJackpot(Math.max(0.0D, amount - getConfiguredBasePot()));
+        currentRound().setJackpot(Math.max(0.0D, amount - getConfiguredBasePot()));
         appendLog("set_jackpot", Map.of("amount", economyService.format(amount)));
         save();
     }
 
     public void addJackpot(double amount) {
-        currentRound.setJackpot(currentRound.getJackpot() + amount);
+        currentRound().setJackpot(currentRound().getJackpot() + amount);
         appendLog("add_jackpot", Map.of("amount", economyService.format(amount), "jackpot", economyService.format(getTotalPot())));
         save();
     }
 
     public void resetRound() {
-        currentRound.reset(LocalDateTime.now(getZoneId()), 0.0D);
+        currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
         appendLog("reset_round", Map.of());
         save();
+    }
+
+    public boolean requireAdminConfirmation(CommandSender sender, String action) {
+        if (!plugin.getConfig().getBoolean("admin-safety.confirm-dangerous-actions", true)) {
+            return false;
+        }
+        if (!(sender instanceof Player player)) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        long timeoutMillis = Math.max(5L, plugin.getConfig().getLong("admin-safety.confirm-timeout-seconds", 20L)) * 1000L;
+        String normalizedAction = action.toLowerCase(Locale.ROOT);
+        PendingAdminAction pendingAction = pendingAdminActions.get(player.getUniqueId());
+        if (pendingAction != null && pendingAction.action().equals(normalizedAction) && now <= pendingAction.expiresAtMillis()) {
+            pendingAdminActions.remove(player.getUniqueId());
+            return false;
+        }
+
+        pendingAdminActions.put(player.getUniqueId(), new PendingAdminAction(normalizedAction, now + timeoutMillis));
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.admin-confirm-required", Map.of(
+            "action", normalizedAction,
+            "seconds", String.valueOf(timeoutMillis / 1000L)
+        ));
+        return true;
     }
 
     public void createHologram(CommandSender sender, String id, String type, String statistic) {
@@ -1280,7 +1752,7 @@ public final class LotteryManager {
         return switch (normalizedParams) {
             case "jackpot", "pot" -> economyService.format(getTotalPot());
             case "payout_pot" -> economyService.format(getDrawPayoutAmount());
-            case "ticket_pot" -> economyService.format(currentRound.getJackpot());
+            case "ticket_pot" -> economyService.format(currentRound().getJackpot());
             case "base_pot" -> economyService.format(getConfiguredBasePot());
             case "ticket_price" -> economyService.format(getTicketPrice());
             case "lottery_id" -> getActiveLotteryId();
@@ -1290,13 +1762,14 @@ public final class LotteryManager {
             case "draw_times" -> formatDrawTimes();
             case "next_draw" -> formatNextDraw();
             case "time_left" -> TimeUtil.formatDurationCompact(Duration.between(ZonedDateTime.now(getZoneId()), getNextDrawAt()));
-            case "total_tickets" -> String.valueOf(currentRound.getTotalTickets());
-            case "players" -> String.valueOf(currentRound.getUniquePlayers());
+            case "total_tickets" -> String.valueOf(currentRound().getTotalTickets());
+            case "players" -> String.valueOf(currentRound().getUniquePlayers());
             case "min_players" -> String.valueOf(getMinimumPlayers());
             case "pending_notifications" -> String.valueOf(getPendingNotificationCount());
             case "pending_payments" -> String.valueOf(pendingPayments.size());
             case "tax_collected_total" -> economyService.format(totalTaxCollected);
             case "season_id" -> getSeasonId();
+            case "season_points" -> player == null ? "0" : String.valueOf(getSeasonPoints(player.getUniqueId()));
             case "winner_count" -> String.valueOf(getPrizeShares().size());
             case "boost_multiplier" -> formatDecimal(getJackpotBoostMultiplier());
             case "player_tickets" -> player == null ? "0" : String.valueOf(getTicketsFor(player.getUniqueId()));
@@ -1378,6 +1851,7 @@ public final class LotteryManager {
             case "highest_win" -> getTopDoubleEntries(PlayerLotteryStats::getHighestWin, economyService::format);
             case "total_won" -> getTopDoubleEntries(PlayerLotteryStats::getTotalWon, economyService::format);
             case "current_tickets" -> getCurrentTicketTopEntries();
+            case "last_winners" -> getLastWinnerEntries();
             default -> List.of();
         };
         return rank <= entries.size() ? entries.get(rank - 1) : null;
@@ -1390,6 +1864,15 @@ public final class LotteryManager {
     private void checkDraw() {
         ensureSeasonIsCurrent();
         ZonedDateTime now = ZonedDateTime.now(getZoneId());
+        for (String lotteryId : getScheduledLotteryIds()) {
+            withLotteryContext(lotteryId, () -> {
+                checkDrawForCurrentLottery(now);
+                return null;
+            });
+        }
+    }
+
+    private void checkDrawForCurrentLottery(ZonedDateTime now) {
         if (!isDrawDayAllowed(now.toLocalDate())) {
             return;
         }
@@ -1400,10 +1883,20 @@ public final class LotteryManager {
         }
 
         String drawKey = formatDrawKey(dueDraw);
-        if (drawKey.equals(lastDrawKey)) {
+        if (drawKey.equals(getLastDrawKey())) {
             return;
         }
         draw(Bukkit.getConsoleSender(), false, drawKey);
+    }
+
+    private List<String> getScheduledLotteryIds() {
+        if (!areLotteryProfilesEnabled()) {
+            return List.of("default");
+        }
+        List<String> ids = getLotteryProfileIds().stream()
+            .filter(id -> plugin.getLotteriesConfig().getBoolean("profiles." + id + ".enabled", true))
+            .toList();
+        return ids.isEmpty() ? List.of("default") : ids;
     }
 
     private void ensureSeasonIsCurrent() {
@@ -1423,6 +1916,7 @@ public final class LotteryManager {
         runSeasonCommands("seasons.auto.commands-before-reset", placeholders);
         runSeasonRewardCommands(oldSeasonId, expectedSeasonId);
         seasonStats.clear();
+        seasonPoints.clear();
         seasonId = expectedSeasonId;
         plugin.getConfig().set("seasons.current-id", seasonId);
         plugin.saveConfig();
@@ -1696,12 +2190,24 @@ public final class LotteryManager {
         return id.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
     }
 
+    private String normalizeConfigKey(String value) {
+        if (value == null) {
+            return "default";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
+        return normalized.isBlank() ? "default" : normalized;
+    }
+
+    private int getSeasonPoints(UUID playerId) {
+        return Math.max(0, seasonPoints.getOrDefault(playerId, 0));
+    }
+
     private DrawResult draw(CommandSender trigger, boolean forced, String drawKey) {
         MessageUtil.send(trigger, plugin.getMessagesConfig(trigger), "messages.draw-start");
 
-        if (currentRound.getTotalTickets() <= 0) {
-            currentRound.reset(LocalDateTime.now(getZoneId()), 0.0D);
-            lastDrawKey = drawKey;
+        if (currentRound().getTotalTickets() <= 0) {
+            currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+            setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
             placeholders.put("carryover", economyService.format(0.0D));
@@ -1718,10 +2224,10 @@ public final class LotteryManager {
             return new DrawResult(forced, "messages.admin-draw-no-players", placeholders);
         }
 
-        if (currentRound.getUniquePlayers() < getMinimumPlayers()) {
+        if (currentRound().getUniquePlayers() < getMinimumPlayers()) {
             RefundSummary refundSummary = shouldRefundOnNotEnoughPlayers() ? refundCurrentRoundTickets() : RefundSummary.empty();
-            currentRound.reset(LocalDateTime.now(getZoneId()), 0.0D);
-            lastDrawKey = drawKey;
+            currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+            setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
             addRefundPlaceholders(placeholders, refundSummary);
@@ -1733,23 +2239,27 @@ public final class LotteryManager {
             return new DrawResult(forced, "messages.admin-draw-not-enough-players", placeholders);
         }
 
-        double amount = getDrawPayoutAmount();
-        int totalTickets = currentRound.getTotalTickets();
+        double grossAmount = getDrawPayoutAmount();
+        PayoutTaxResult payoutTax = applyPayoutTax(grossAmount);
+        double amount = payoutTax.netAmount();
+        int totalTickets = currentRound().getTotalTickets();
         List<WinnerPayout> winnerPayouts = createWinnerPayouts(amount);
 
-        lastDrawKey = drawKey;
-        for (UUID playerId : currentRound.getTicketsByPlayer().keySet()) {
+        setLastDrawKey(drawKey);
+        for (UUID playerId : currentRound().getTicketsByPlayer().keySet()) {
             getOrCreateStats(playerId, getCachedPlayerName(playerId)).recordRoundPlayed(getCachedPlayerName(playerId));
             getOrCreateSeasonStats(playerId, getCachedPlayerName(playerId)).recordRoundPlayed(getCachedPlayerName(playerId));
+            addSeasonPoints(playerId, getCachedPlayerName(playerId), plugin.getConfig().getInt("season-shop.points.round-played", 0));
         }
 
         for (WinnerPayout payout : winnerPayouts) {
             getOrCreateStats(payout.playerId(), payout.playerName()).recordWin(payout.playerName(), payout.amount(), LocalDateTime.now(getZoneId()));
             getOrCreateSeasonStats(payout.playerId(), payout.playerName()).recordWin(payout.playerName(), payout.amount(), LocalDateTime.now(getZoneId()));
+            addSeasonPoints(payout.playerId(), payout.playerName(), plugin.getConfig().getInt("season-shop.points.win", 0));
         }
         for (int index = winnerPayouts.size() - 1; index >= 0; index--) {
             WinnerPayout payout = winnerPayouts.get(index);
-            winnerHistory.add(0, new WinnerEntry(payout.playerId(), payout.playerName(), payout.amount(), LocalDateTime.now(getZoneId()), payout.tickets()));
+            winnerHistory().add(0, new WinnerEntry(payout.playerId(), payout.playerName(), payout.amount(), LocalDateTime.now(getZoneId()), payout.tickets()));
         }
         trimWinnerHistory();
 
@@ -1758,6 +2268,8 @@ public final class LotteryManager {
         placeholders.put("player", mainWinner.playerName());
         placeholders.put("amount", economyService.format(mainWinner.amount()));
         placeholders.put("pot_amount", economyService.format(amount));
+        placeholders.put("gross_amount", economyService.format(grossAmount));
+        placeholders.put("payout_tax", economyService.format(payoutTax.taxAmount()));
         placeholders.put("tickets", String.valueOf(mainWinner.tickets()));
         placeholders.put("chance", formatChance((double) mainWinner.tickets() / Math.max(1, totalTickets)));
         placeholders.put("winner_count", String.valueOf(winnerPayouts.size()));
@@ -1797,7 +2309,7 @@ public final class LotteryManager {
                 "lottery", getActiveLotteryId()
             ));
         }
-        currentRound.reset(LocalDateTime.now(getZoneId()), 0.0D);
+        currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
         save();
         appendLog("draw_winner", placeholders);
         runAutoBackupAfterDraw();
@@ -1810,6 +2322,39 @@ public final class LotteryManager {
         }
 
         Bukkit.getScheduler().runTask(plugin, () -> createBackup(Bukkit.getConsoleSender()));
+    }
+
+    private PayoutTaxResult applyPayoutTax(double grossAmount) {
+        if (grossAmount <= 0.0D || isItemLottery() || !plugin.getConfig().getBoolean("payout-tax.enabled", false)) {
+            return new PayoutTaxResult(grossAmount, 0.0D);
+        }
+
+        double rate = Math.max(0.0D, Math.min(1.0D, plugin.getConfig().getDouble("payout-tax.rate", 0.0D)));
+        double taxAmount = grossAmount * rate;
+        if (taxAmount <= 0.0D) {
+            return new PayoutTaxResult(grossAmount, 0.0D);
+        }
+
+        String account = plugin.getConfig().getString("payout-tax.account", "");
+        Map<String, String> placeholders = createCommonPlaceholders(null);
+        placeholders.put("gross_amount", economyService.format(grossAmount));
+        placeholders.put("payout_tax", economyService.format(taxAmount));
+        placeholders.put("net_amount", economyService.format(grossAmount - taxAmount));
+        if (account != null && !account.isBlank()) {
+            economyService.deposit(Bukkit.getOfflinePlayer(account), taxAmount);
+            appendTransaction("payout_tax", account, taxAmount, Map.of(
+                "lottery", getActiveLotteryId(),
+                "gross", economyService.format(grossAmount)
+            ));
+        }
+
+        for (String command : plugin.getConfig().getStringList("payout-tax.commands")) {
+            String resolvedCommand = MessageUtil.format(null, command, placeholders);
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+        return new PayoutTaxResult(grossAmount - taxAmount, taxAmount);
     }
 
     private void executeWinCommands(Map<String, String> placeholders) {
@@ -1827,6 +2372,37 @@ public final class LotteryManager {
             }
         }
         executeRewardPackage(placeholders);
+        executeItemLotteryPrize(placeholders);
+    }
+
+    private void executeItemLotteryPrize(Map<String, String> placeholders) {
+        if (!isItemLottery()) {
+            return;
+        }
+
+        for (String command : plugin.getConfig().getStringList("item-lottery.prize.commands")) {
+            String resolvedCommand = MessageUtil.format(null, command, placeholders);
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+
+        int amount = Math.max(0, plugin.getConfig().getInt("item-lottery.prize.item.amount", 0));
+        if (amount <= 0) {
+            return;
+        }
+
+        try {
+            Player player = Bukkit.getPlayer(UUID.fromString(placeholders.getOrDefault("player_uuid", "")));
+            if (player == null) {
+                return;
+            }
+            Material material = parseMaterial(plugin.getConfig().getString("item-lottery.prize.item.material", "DIAMOND"), Material.DIAMOND);
+            player.getInventory().addItem(new ItemStack(material, amount)).values().forEach(item ->
+                player.getWorld().dropItemNaturally(player.getLocation(), item));
+        } catch (IllegalArgumentException ignored) {
+            plugin.getLogger().warning("Could not give item lottery prize: invalid winner UUID.");
+        }
     }
 
     private void executeRewardPackage(Map<String, String> placeholders) {
@@ -1894,14 +2470,33 @@ public final class LotteryManager {
         int refundedTickets = 0;
         int failedRefunds = 0;
 
-        for (Map.Entry<UUID, Integer> entry : currentRound.getTicketsByPlayer().entrySet()) {
+        for (Map.Entry<UUID, Integer> entry : currentRound().getTicketsByPlayer().entrySet()) {
             int tickets = entry.getValue();
             if (tickets <= 0) {
                 continue;
             }
 
             OfflinePlayer player = Bukkit.getOfflinePlayer(entry.getKey());
-            double amount = tickets * getTicketPrice();
+            if (isItemLottery()) {
+                int itemAmount = getItemLotteryStakeAmount() * tickets;
+                refundItemLotteryStake(entry.getKey(), itemAmount);
+                refundedPlayers++;
+                refundedTickets += tickets;
+                appendTransaction("item_refund", player.getName() != null ? player.getName() : entry.getKey().toString(), 0.0D, Map.of(
+                    "tickets", String.valueOf(tickets),
+                    "items", String.valueOf(itemAmount),
+                    "material", getItemLotteryStakeMaterial().name(),
+                    "reason", "not_enough_players",
+                    "lottery", getActiveLotteryId()
+                ));
+                notifyItemRefund(entry.getKey(), tickets, itemAmount);
+                continue;
+            }
+
+            double amount = currentRound().getSpentFor(entry.getKey());
+            if (amount <= 0.0D) {
+                amount = tickets * getTicketPrice();
+            }
             if (economyService.deposit(player, amount)) {
                 refunded += amount;
                 refundedPlayers++;
@@ -1934,6 +2529,42 @@ public final class LotteryManager {
         }
 
         return new RefundSummary(refunded, refundedPlayers, refundedTickets, failedRefunds);
+    }
+
+    private void refundItemLotteryStake(UUID playerId, int itemAmount) {
+        Player onlinePlayer = Bukkit.getPlayer(playerId);
+        if (onlinePlayer != null) {
+            onlinePlayer.getInventory().addItem(new ItemStack(getItemLotteryStakeMaterial(), itemAmount)).values().forEach(item ->
+                onlinePlayer.getWorld().dropItemNaturally(onlinePlayer.getLocation(), item));
+        }
+
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("player", getCachedPlayerName(playerId));
+        placeholders.put("player_uuid", playerId.toString());
+        placeholders.put("item_amount", String.valueOf(itemAmount));
+        placeholders.put("item", getItemLotteryStakeMaterial().name());
+        placeholders.put("lottery", getActiveLotteryId());
+        for (String command : plugin.getConfig().getStringList("item-lottery.refund.commands")) {
+            String resolvedCommand = MessageUtil.format(onlinePlayer, command, placeholders);
+            if (!resolvedCommand.isBlank()) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), stripLeadingSlash(resolvedCommand));
+            }
+        }
+    }
+
+    private void notifyItemRefund(UUID playerId, int tickets, int itemAmount) {
+        Map<String, String> placeholders = Map.of(
+            "amount", "0",
+            "tickets", String.valueOf(tickets),
+            "item_amount", String.valueOf(itemAmount),
+            "item", getItemLotteryStakeMaterial().name()
+        );
+        Player onlinePlayer = Bukkit.getPlayer(playerId);
+        if (onlinePlayer != null) {
+            MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.draw-refund-items", placeholders);
+        } else {
+            queuePendingNotification(playerId, "messages.draw-refund-items-offline", placeholders);
+        }
     }
 
     private void addRefundPlaceholders(Map<String, String> placeholders, RefundSummary refundSummary) {
@@ -2126,7 +2757,7 @@ public final class LotteryManager {
             onlinePlayer.playSound(onlinePlayer.getLocation(), sound, 1.0F, 1.0F);
             onlinePlayer.sendTitle(title, MessageUtil.color(subtitleTemplate)
                 .replace("%player%", Bukkit.getOfflinePlayer(winnerId).getName() != null ? Bukkit.getOfflinePlayer(winnerId).getName() : winnerId.toString())
-                .replace("%amount%", economyService.format(winnerHistory.get(0).amount())), 10, 70, 20);
+                .replace("%amount%", economyService.format(winnerHistory().get(0).amount())), 10, 70, 20);
         }
     }
 
@@ -2230,9 +2861,9 @@ public final class LotteryManager {
     }
 
     private UUID pickWinner() {
-        int winningNumber = random.nextInt(currentRound.getTotalTickets()) + 1;
+        int winningNumber = random.nextInt(currentRound().getTotalTickets()) + 1;
         int cursor = 0;
-        for (Map.Entry<UUID, Integer> entry : currentRound.getTicketsByPlayer().entrySet()) {
+        for (Map.Entry<UUID, Integer> entry : currentRound().getTicketsByPlayer().entrySet()) {
             cursor += entry.getValue();
             if (cursor >= winningNumber) {
                 return entry.getKey();
@@ -2258,7 +2889,7 @@ public final class LotteryManager {
             double share = shares.get(Math.min(index, shares.size() - 1));
             double payoutAmount = totalAmount * (share / totalShare);
             String winnerName = getCachedPlayerName(winnerId);
-            payouts.add(new WinnerPayout(index + 1, winnerId, winnerName, payoutAmount, currentRound.getTicketsFor(winnerId)));
+            payouts.add(new WinnerPayout(index + 1, winnerId, winnerName, payoutAmount, currentRound().getTicketsFor(winnerId)));
         }
         return payouts;
     }
@@ -2294,7 +2925,7 @@ public final class LotteryManager {
         for (int index = 0; index < winners.size(); index++) {
             UUID winnerId = winners.get(index);
             payouts.add(new WinnerPayout(index + 1, winnerId, getCachedPlayerName(winnerId),
-                payoutAmounts.get(index), currentRound.getTicketsFor(winnerId)));
+                payoutAmounts.get(index), currentRound().getTicketsFor(winnerId)));
         }
         return payouts;
     }
@@ -2314,7 +2945,7 @@ public final class LotteryManager {
     }
 
     private List<UUID> pickUniqueWinners(int wantedWinners) {
-        Map<UUID, Integer> candidates = new HashMap<>(currentRound.getTicketsByPlayer());
+        Map<UUID, Integer> candidates = new HashMap<>(currentRound().getTicketsByPlayer());
         List<UUID> winners = new ArrayList<>();
         int limit = Math.min(Math.max(1, wantedWinners), candidates.size());
         for (int index = 0; index < limit; index++) {
@@ -2342,6 +2973,8 @@ public final class LotteryManager {
         Map<String, String> placeholders = createCommonPlaceholders(null);
         placeholders.put("rank", String.valueOf(payout.rank()));
         placeholders.put("player", payout.playerName());
+        placeholders.put("player_name", payout.playerName());
+        placeholders.put("player_uuid", payout.playerId().toString());
         placeholders.put("amount", economyService.format(payout.amount()));
         placeholders.put("pot_amount", economyService.format(totalPot));
         placeholders.put("tickets", String.valueOf(payout.tickets()));
@@ -2358,35 +2991,85 @@ public final class LotteryManager {
     }
 
     private void loadRound() {
-        currentRound.reset(LocalDateTime.now(getZoneId()), 0.0D);
-        currentRound.setJackpot(dataConfig.getDouble("round.jackpot", 0.0D));
+        lotteryRounds.clear();
+        loadRound("default", "round");
 
-        String startedAt = dataConfig.getString("round.started-at");
+        ConfigurationSection roundsSection = dataConfig.getConfigurationSection("rounds");
+        if (roundsSection != null) {
+            for (String lotteryId : roundsSection.getKeys(false)) {
+                loadRound(lotteryId, "rounds." + lotteryId);
+            }
+        }
+
+        for (String lotteryId : getLotteryProfileIds()) {
+            roundFor(lotteryId);
+        }
+        roundFor("default");
+    }
+
+    private void loadRound(String lotteryId, String path) {
+        LotteryRound round = roundFor(lotteryId);
+        round.reset(LocalDateTime.now(getZoneId()), 0.0D);
+        round.setJackpot(dataConfig.getDouble(path + ".jackpot", 0.0D));
+
+        String startedAt = dataConfig.getString(path + ".started-at");
         if (startedAt != null && !startedAt.isBlank()) {
-            currentRound.setStartedAt(LocalDateTime.parse(startedAt));
+            round.setStartedAt(LocalDateTime.parse(startedAt));
         }
 
-        ConfigurationSection ticketsSection = dataConfig.getConfigurationSection("round.tickets");
-        if (ticketsSection == null) {
-            return;
-        }
-
-        for (String key : ticketsSection.getKeys(false)) {
-            try {
-                UUID playerId = UUID.fromString(key);
-                int amount = ticketsSection.getInt(key, 0);
-                if (amount > 0) {
-                    currentRound.getTicketsByPlayer().put(playerId, amount);
+        ConfigurationSection ticketsSection = dataConfig.getConfigurationSection(path + ".tickets");
+        if (ticketsSection != null) {
+            for (String key : ticketsSection.getKeys(false)) {
+                try {
+                    UUID playerId = UUID.fromString(key);
+                    int amount = ticketsSection.getInt(key, 0);
+                    if (amount > 0) {
+                        round.getTicketsByPlayer().put(playerId, amount);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    plugin.getLogger().warning("Skipping invalid UUID in data.yml: " + key);
                 }
-            } catch (IllegalArgumentException ignored) {
-                plugin.getLogger().warning("Skipping invalid UUID in data.yml: " + key);
+            }
+        }
+
+        ConfigurationSection spentSection = dataConfig.getConfigurationSection(path + ".spent");
+        if (spentSection != null) {
+            for (String key : spentSection.getKeys(false)) {
+                try {
+                    UUID playerId = UUID.fromString(key);
+                    double amount = spentSection.getDouble(key, 0.0D);
+                    if (amount > 0.0D) {
+                        round.getSpentByPlayer().put(playerId, amount);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    plugin.getLogger().warning("Skipping invalid spent UUID in data.yml: " + key);
+                }
             }
         }
     }
 
     private void loadHistory() {
-        winnerHistory.clear();
-        ConfigurationSection historySection = dataConfig.getConfigurationSection("history");
+        winnerHistories.clear();
+        loadHistory("default", "history");
+
+        ConfigurationSection historiesSection = dataConfig.getConfigurationSection("histories");
+        if (historiesSection != null) {
+            for (String lotteryId : historiesSection.getKeys(false)) {
+                loadHistory(lotteryId, "histories." + lotteryId);
+            }
+        }
+
+        for (String lotteryId : getLotteryProfileIds()) {
+            winnerHistoryFor(lotteryId);
+        }
+        winnerHistoryFor("default");
+        trimWinnerHistory();
+    }
+
+    private void loadHistory(String lotteryId, String path) {
+        List<WinnerEntry> history = winnerHistoryFor(lotteryId);
+        history.clear();
+        ConfigurationSection historySection = dataConfig.getConfigurationSection(path);
         if (historySection == null) {
             return;
         }
@@ -2403,14 +3086,13 @@ public final class LotteryManager {
                 double amount = entrySection.getDouble("amount", 0.0D);
                 LocalDateTime wonAt = LocalDateTime.parse(entrySection.getString("won-at"));
                 int ticketsBought = entrySection.getInt("tickets-bought", 0);
-                winnerHistory.add(new WinnerEntry(playerId, playerName, amount, wonAt, ticketsBought));
+                history.add(new WinnerEntry(playerId, playerName, amount, wonAt, ticketsBought));
             } catch (Exception exception) {
                 plugin.getLogger().warning("Skipping invalid winner history entry " + key + ": " + exception.getMessage());
             }
         }
 
-        winnerHistory.sort(Comparator.comparing(WinnerEntry::wonAt).reversed());
-        trimWinnerHistory();
+        history.sort(Comparator.comparing(WinnerEntry::wonAt).reversed());
     }
 
     private void loadStatistics() {
@@ -2478,6 +3160,50 @@ public final class LotteryManager {
                 ));
             } catch (IllegalArgumentException exception) {
                 plugin.getLogger().warning("Skipping invalid daily usage UUID in data.yml: " + key);
+            }
+        }
+    }
+
+    private void loadFreeTicketClaims() {
+        freeTicketClaims.clear();
+        ConfigurationSection claimsSection = dataConfig.getConfigurationSection("free-ticket-claims");
+        if (claimsSection == null) {
+            return;
+        }
+
+        for (String playerKey : claimsSection.getKeys(false)) {
+            try {
+                UUID playerId = UUID.fromString(playerKey);
+                ConfigurationSection playerSection = claimsSection.getConfigurationSection(playerKey);
+                if (playerSection == null) {
+                    continue;
+                }
+                Map<String, Long> claims = new HashMap<>();
+                for (String reason : playerSection.getKeys(false)) {
+                    claims.put(reason.toLowerCase(Locale.ROOT), playerSection.getLong(reason, 0L));
+                }
+                freeTicketClaims.put(playerId, claims);
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning("Skipping invalid free ticket claim UUID in data.yml: " + playerKey);
+            }
+        }
+    }
+
+    private void loadSeasonPoints() {
+        seasonPoints.clear();
+        ConfigurationSection pointsSection = dataConfig.getConfigurationSection("season.points");
+        if (pointsSection == null) {
+            return;
+        }
+
+        for (String key : pointsSection.getKeys(false)) {
+            try {
+                int points = pointsSection.getInt(key, 0);
+                if (points > 0) {
+                    seasonPoints.put(UUID.fromString(key), points);
+                }
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning("Skipping invalid season points UUID in data.yml: " + key);
             }
         }
     }
@@ -2575,30 +3301,58 @@ public final class LotteryManager {
 
     private void trimWinnerHistory() {
         int historySize = plugin.getConfig().getInt("settings.history-size", 10);
-        while (winnerHistory.size() > historySize) {
-            winnerHistory.remove(winnerHistory.size() - 1);
+        for (List<WinnerEntry> history : winnerHistories.values()) {
+            while (history.size() > historySize) {
+                history.remove(history.size() - 1);
+            }
+        }
+    }
+
+    private void saveRound(String path, LotteryRound round) {
+        dataConfig.set(path + ".jackpot", round.getJackpot());
+        dataConfig.set(path + ".started-at", round.getStartedAt().toString());
+        dataConfig.set(path + ".tickets", null);
+        for (Map.Entry<UUID, Integer> entry : round.getTicketsByPlayer().entrySet()) {
+            dataConfig.set(path + ".tickets." + entry.getKey(), entry.getValue());
+        }
+        dataConfig.set(path + ".spent", null);
+        for (Map.Entry<UUID, Double> entry : round.getSpentByPlayer().entrySet()) {
+            dataConfig.set(path + ".spent." + entry.getKey(), entry.getValue());
+        }
+    }
+
+    private void saveHistory(String path, List<WinnerEntry> history) {
+        dataConfig.set(path, null);
+        for (int index = 0; index < history.size(); index++) {
+            WinnerEntry entry = history.get(index);
+            String entryPath = path + "." + index;
+            dataConfig.set(entryPath + ".uuid", entry.playerId().toString());
+            dataConfig.set(entryPath + ".name", entry.playerName());
+            dataConfig.set(entryPath + ".amount", entry.amount());
+            dataConfig.set(entryPath + ".won-at", entry.wonAt().toString());
+            dataConfig.set(entryPath + ".tickets-bought", entry.ticketsBought());
         }
     }
 
     private void save() {
-        dataConfig.set("round.jackpot", currentRound.getJackpot());
-        dataConfig.set("round.started-at", currentRound.getStartedAt().toString());
-        dataConfig.set("round.tickets", null);
-        for (Map.Entry<UUID, Integer> entry : currentRound.getTicketsByPlayer().entrySet()) {
-            dataConfig.set("round.tickets." + entry.getKey(), entry.getValue());
+        saveRound("round", roundFor("default"));
+        dataConfig.set("rounds", null);
+        for (Map.Entry<String, LotteryRound> entry : lotteryRounds.entrySet()) {
+            saveRound("rounds." + entry.getKey(), entry.getValue());
         }
 
+        lastDrawKey = lastDrawKeys.getOrDefault("default", lastDrawKey);
         dataConfig.set("last-draw-key", lastDrawKey);
         dataConfig.set("last-draw-date", lastDrawKey != null && lastDrawKey.length() >= 10 ? lastDrawKey.substring(0, 10) : null);
-        dataConfig.set("history", null);
-        for (int index = 0; index < winnerHistory.size(); index++) {
-            WinnerEntry entry = winnerHistory.get(index);
-            String path = "history." + index;
-            dataConfig.set(path + ".uuid", entry.playerId().toString());
-            dataConfig.set(path + ".name", entry.playerName());
-            dataConfig.set(path + ".amount", entry.amount());
-            dataConfig.set(path + ".won-at", entry.wonAt().toString());
-            dataConfig.set(path + ".tickets-bought", entry.ticketsBought());
+        dataConfig.set("last-draw-keys", null);
+        for (Map.Entry<String, String> entry : lastDrawKeys.entrySet()) {
+            dataConfig.set("last-draw-keys." + entry.getKey(), entry.getValue());
+        }
+
+        saveHistory("history", winnerHistoryFor("default"));
+        dataConfig.set("histories", null);
+        for (Map.Entry<String, List<WinnerEntry>> entry : winnerHistories.entrySet()) {
+            saveHistory("histories." + entry.getKey(), entry.getValue());
         }
 
         dataConfig.set("statistics", null);
@@ -2629,13 +3383,26 @@ public final class LotteryManager {
             dataConfig.set(path + ".last-purchase-at", stats.getLastPurchaseAt() != null ? stats.getLastPurchaseAt().toString() : null);
             dataConfig.set(path + ".last-win-at", stats.getLastWinAt() != null ? stats.getLastWinAt().toString() : null);
         }
-
         dataConfig.set("daily-usage", null);
         for (Map.Entry<UUID, DailyUsage> entry : dailyUsage.entrySet()) {
             String path = "daily-usage." + entry.getKey();
             dataConfig.set(path + ".date", entry.getValue().date());
             dataConfig.set(path + ".tickets", entry.getValue().tickets());
             dataConfig.set(path + ".spent", entry.getValue().spent());
+        }
+
+        dataConfig.set("free-ticket-claims", null);
+        for (Map.Entry<UUID, Map<String, Long>> entry : freeTicketClaims.entrySet()) {
+            for (Map.Entry<String, Long> claim : entry.getValue().entrySet()) {
+                dataConfig.set("free-ticket-claims." + entry.getKey() + "." + claim.getKey(), claim.getValue());
+            }
+        }
+
+        dataConfig.set("season.points", null);
+        for (Map.Entry<UUID, Integer> entry : seasonPoints.entrySet()) {
+            if (entry.getValue() > 0) {
+                dataConfig.set("season.points." + entry.getKey(), entry.getValue());
+            }
         }
 
         dataConfig.set("meta.total-tax-collected", totalTaxCollected);
@@ -2682,6 +3449,45 @@ public final class LotteryManager {
         return profileValue > 0.0D ? profileValue : plugin.getConfig().getDouble("settings.ticket-price", 250.0D);
     }
 
+    private double calculateTicketCost(int amount) {
+        if (isItemLottery()) {
+            return 0.0D;
+        }
+        if (!plugin.getConfig().getBoolean("pricing.tiered-prices.enabled", false)) {
+            return amount * getTicketPrice();
+        }
+
+        ConfigurationSection tiersSection = plugin.getConfig().getConfigurationSection("pricing.tiered-prices.tiers");
+        if (tiersSection == null) {
+            return amount * getTicketPrice();
+        }
+
+        if (tiersSection.isDouble(String.valueOf(amount)) || tiersSection.isInt(String.valueOf(amount))) {
+            return Math.max(0.0D, tiersSection.getDouble(String.valueOf(amount), amount * getTicketPrice()));
+        }
+
+        if (!plugin.getConfig().getBoolean("pricing.tiered-prices.best-fit", true)) {
+            return amount * getTicketPrice();
+        }
+
+        List<Integer> tiers = tiersSection.getKeys(false).stream()
+            .map(value -> parsePositiveInt(value, 0))
+            .filter(value -> value > 0)
+            .sorted(Comparator.reverseOrder())
+            .toList();
+        int remaining = amount;
+        double cost = 0.0D;
+        for (int tier : tiers) {
+            int packages = remaining / tier;
+            if (packages <= 0) {
+                continue;
+            }
+            cost += packages * tiersSection.getDouble(String.valueOf(tier), tier * getTicketPrice());
+            remaining -= packages * tier;
+        }
+        return cost + remaining * getTicketPrice();
+    }
+
     private double getConfiguredBasePot() {
         double profileValue = getActiveProfileDouble("additional-pot-amount", -1.0D);
         double configured = profileValue >= 0.0D ? profileValue : plugin.getConfig().getDouble("settings.additional-pot-amount", 0.0D);
@@ -2689,7 +3495,7 @@ public final class LotteryManager {
     }
 
     private double getTotalPot() {
-        return currentRound.getJackpot() + getConfiguredBasePot();
+        return currentRound().getJackpot() + getConfiguredBasePot();
     }
 
     private double getDrawPayoutAmount() {
@@ -2736,6 +3542,9 @@ public final class LotteryManager {
     }
 
     private String getActiveLotteryId() {
+        if (operationLotteryId != null && !operationLotteryId.isBlank()) {
+            return operationLotteryId;
+        }
         if (!areLotteryProfilesEnabled()) {
             return "default";
         }
@@ -2745,6 +3554,18 @@ public final class LotteryManager {
             return "default";
         }
         return configured.toLowerCase(Locale.ROOT);
+    }
+
+    private String getLastDrawKey() {
+        return lastDrawKeys.getOrDefault(getActiveLotteryId(), "");
+    }
+
+    private void setLastDrawKey(String drawKey) {
+        String lotteryId = getActiveLotteryId();
+        lastDrawKeys.put(lotteryId, drawKey);
+        if ("default".equals(lotteryId)) {
+            lastDrawKey = drawKey;
+        }
     }
 
     private String getActiveLotteryDisplayName() {
@@ -2794,6 +3615,24 @@ public final class LotteryManager {
             return "messages.eligibility-denied";
         }
 
+        String playerName = player.getName().toLowerCase(Locale.ROOT);
+        String playerUuid = player.getUniqueId().toString().toLowerCase(Locale.ROOT);
+        List<String> blockedPlayers = plugin.getConfig().getStringList("eligibility.players.blacklist").stream()
+            .map(value -> value.toLowerCase(Locale.ROOT))
+            .toList();
+        if (blockedPlayers.contains(playerName) || blockedPlayers.contains(playerUuid)) {
+            return "messages.eligibility-denied";
+        }
+
+        if (plugin.getConfig().getBoolean("eligibility.players.whitelist.enabled", false)) {
+            List<String> allowedPlayers = plugin.getConfig().getStringList("eligibility.players.whitelist.players").stream()
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .toList();
+            if (!allowedPlayers.contains(playerName) && !allowedPlayers.contains(playerUuid)) {
+                return "messages.eligibility-denied";
+            }
+        }
+
         if (plugin.getConfig().getBoolean("eligibility.permission.enabled", false)) {
             String permission = plugin.getConfig().getString("eligibility.permission.node", "lottery.participate");
             if (!player.hasPermission(permission)) {
@@ -2812,7 +3651,28 @@ public final class LotteryManager {
         if (minPlaytimeMinutes > 0 && player.getStatistic(Statistic.PLAY_ONE_MINUTE) < minPlaytimeMinutes * 60 * 20) {
             return "messages.eligibility-denied";
         }
+
+        if (plugin.getConfig().getBoolean("eligibility.groups.enabled", false)) {
+            List<String> blockedGroups = plugin.getConfig().getStringList("eligibility.groups.blocked");
+            for (String group : blockedGroups) {
+                if (hasGroupPermission(player, group)) {
+                    return "messages.eligibility-denied";
+                }
+            }
+
+            List<String> allowedGroups = plugin.getConfig().getStringList("eligibility.groups.allowed");
+            if (!allowedGroups.isEmpty() && allowedGroups.stream().noneMatch(group -> hasGroupPermission(player, group))) {
+                return "messages.eligibility-denied";
+            }
+        }
         return null;
+    }
+
+    private boolean hasGroupPermission(Player player, String group) {
+        String normalizedGroup = group.toLowerCase(Locale.ROOT);
+        return player.hasPermission("group." + normalizedGroup)
+            || player.hasPermission("luckperms.group." + normalizedGroup)
+            || player.hasPermission("cmi.rank." + normalizedGroup);
     }
 
     private LocalTime getDrawTime() {
@@ -2835,7 +3695,7 @@ public final class LotteryManager {
 
             for (LocalTime drawTime : getDrawTimes()) {
                 ZonedDateTime candidate = date.atTime(drawTime).atZone(getZoneId());
-                if (candidate.isAfter(now) && !formatDrawKey(candidate).equals(lastDrawKey)) {
+                if (candidate.isAfter(now) && !formatDrawKey(candidate).equals(getLastDrawKey())) {
                     return candidate;
                 }
             }
@@ -2996,7 +3856,7 @@ public final class LotteryManager {
         Map<String, String> placeholders = createCommonPlaceholders(player);
         int buyAmount = getConfiguredBuyAmount(path);
         placeholders.put("buy_amount", String.valueOf(buyAmount));
-        placeholders.put("buy_price", economyService.format(getTicketPrice() * buyAmount));
+        placeholders.put("buy_price", economyService.format(calculateTicketCost(buyAmount)));
         return placeholders;
     }
 
@@ -3187,7 +4047,7 @@ public final class LotteryManager {
     }
 
     private List<String> formatCurrentTicketTop() {
-        List<String> lines = currentRound.getTicketsByPlayer().entrySet().stream()
+        List<String> lines = currentRound().getTicketsByPlayer().entrySet().stream()
             .filter(entry -> entry.getValue() > 0)
             .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed())
             .limit(10)
@@ -3198,7 +4058,7 @@ public final class LotteryManager {
     }
 
     private List<TopEntry> getCurrentTicketTopEntries() {
-        return currentRound.getTicketsByPlayer().entrySet().stream()
+        return currentRound().getTicketsByPlayer().entrySet().stream()
             .filter(entry -> entry.getValue() > 0)
             .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed())
             .limit(10)
@@ -3206,15 +4066,22 @@ public final class LotteryManager {
             .toList();
     }
 
+    private List<TopEntry> getLastWinnerEntries() {
+        return winnerHistory().stream()
+            .limit(10)
+            .map(entry -> new TopEntry(entry.playerName(), economyService.format(entry.amount()) + " - " + entry.wonAt().format(WINNER_DATE_FORMAT)))
+            .toList();
+    }
+
     private List<String> formatLastWinners() {
-        if (winnerHistory.isEmpty()) {
+        if (winnerHistory().isEmpty()) {
             return List.of(MessageUtil.color("&7Noch keine Gewinner."));
         }
 
         List<String> lines = new ArrayList<>();
-        int limit = Math.min(10, winnerHistory.size());
+        int limit = Math.min(10, winnerHistory().size());
         for (int index = 0; index < limit; index++) {
-            WinnerEntry entry = winnerHistory.get(index);
+            WinnerEntry entry = winnerHistory().get(index);
             lines.add(MessageUtil.color("&e#" + (index + 1) + " " + entry.playerName()
                 + " &7- &f" + economyService.format(entry.amount())
                 + " &8(" + entry.wonAt().format(WINNER_DATE_FORMAT)
@@ -3326,6 +4193,10 @@ public final class LotteryManager {
 
             if (lowerAction.equals("force-draw")) {
                 if (player.hasPermission("lottery.admin")) {
+                    if (requireAdminConfirmation(player, "force-draw")) {
+                        refresh = false;
+                        continue;
+                    }
                     DrawResult result = forceDraw(player);
                     MessageUtil.send(player, plugin.getMessagesConfig(player), result.adminMessagePath(), result.placeholders());
                 }
@@ -3344,6 +4215,10 @@ public final class LotteryManager {
 
             if (lowerAction.equals("reset-round")) {
                 if (player.hasPermission("lottery.admin")) {
+                    if (requireAdminConfirmation(player, "reset-round")) {
+                        refresh = false;
+                        continue;
+                    }
                     resetRound();
                     MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reset-success");
                 }
@@ -3513,6 +4388,9 @@ public final class LotteryManager {
     private record PendingPurchase(int amount, double cost, long expiresAtMillis) {
     }
 
+    private record PendingAdminAction(String action, long expiresAtMillis) {
+    }
+
     private record DailyUsage(String date, int tickets, double spent) {
     }
 
@@ -3535,6 +4413,9 @@ public final class LotteryManager {
         private static RefundSummary empty() {
             return new RefundSummary(0.0D, 0, 0, 0);
         }
+    }
+
+    private record PayoutTaxResult(double netAmount, double taxAmount) {
     }
 
     private record TopEntry(String name, String value) {

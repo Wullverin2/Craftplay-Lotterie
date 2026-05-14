@@ -27,7 +27,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 3;
+    private static final int CONFIG_VERSION = 4;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -175,6 +175,33 @@ public final class LotteryPlugin extends JavaPlugin {
             getLogger().info("Refunds on failed draws are enabled. Make sure your economy supports OfflinePlayer deposits.");
         }
         generatePlaceholderDocumentation();
+        writeDefaultReferenceFiles();
+    }
+
+    private void writeDefaultReferenceFiles() {
+        File referenceFolder = new File(getDataFolder(), "reference");
+        if (!referenceFolder.exists() && !referenceFolder.mkdirs()) {
+            getLogger().warning("Could not create reference folder for commented default configs.");
+            return;
+        }
+
+        copyDefaultReference("config.yml", new File(referenceFolder, "config.yml"));
+        copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui.yml"));
+        copyDefaultReference("holograms.yml", new File(referenceFolder, "holograms.yml"));
+        copyDefaultReference("lotteries.yml", new File(referenceFolder, "lotteries.yml"));
+        copyDefaultReference("lang/de.yml", new File(referenceFolder, "lang-de.yml"));
+        copyDefaultReference("lang/en.yml", new File(referenceFolder, "lang-en.yml"));
+    }
+
+    private void copyDefaultReference(String resourcePath, File target) {
+        try (InputStream inputStream = getResource(resourcePath)) {
+            if (inputStream == null) {
+                return;
+            }
+            Files.copy(inputStream, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException exception) {
+            getLogger().warning("Could not write reference config " + target.getName() + ": " + exception.getMessage());
+        }
     }
 
     private void generatePlaceholderDocumentation() {
@@ -216,6 +243,7 @@ public final class LotteryPlugin extends JavaPlugin {
             - `%lottery_player_stats_total_won%`
             - `%lottery_player_stats_rounds_played%`
             - `%lottery_player_stats_profit%`
+            - `%lottery_season_points%`
 
             ## Saison
             - `%lottery_season_id%`
@@ -228,7 +256,7 @@ public final class LotteryPlugin extends JavaPlugin {
             ## Toplisten
             Schema: `%lottery_top_<statistik>_<rang>%`, `%lottery_top_<statistik>_<rang>_name%`, `%lottery_top_<statistik>_<rang>_value%`
 
-            Statistiken: `rounds_played`, `tickets_bought`, `money_spent`, `wins`, `highest_win`, `total_won`, `current_tickets`.
+            Statistiken: `rounds_played`, `tickets_bought`, `money_spent`, `wins`, `highest_win`, `total_won`, `current_tickets`, `last_winners`.
             """;
 
         try {

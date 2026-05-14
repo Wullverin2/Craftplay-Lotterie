@@ -24,7 +24,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
 
     private static final List<String> SUBCOMMANDS = List.of(
-        "help", "buy", "gui", "jackpot", "winners", "stats", "nextdraw",
+        "help", "buy", "free", "shop", "gui", "jackpot", "winners", "stats", "nextdraw",
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
         "season", "preview", "editor", "lotteries", "transactions"
@@ -69,6 +69,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return switch (subcommand) {
             case "help" -> handleHelp(sender);
             case "buy" -> handleBuy(sender, args);
+            case "free" -> handleFree(sender, args);
+            case "shop" -> handleShop(sender, args);
             case "gui" -> handleGui(sender);
             case "jackpot", "status" -> handleStatus(sender);
             case "winners" -> handleWinners(sender);
@@ -86,7 +88,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "notifications" -> handleNotifications(sender, args);
             case "payments" -> handlePayments(sender);
             case "backup" -> handleBackup(sender);
-            case "export" -> handleExport(sender);
+            case "export" -> handleExport(sender, args);
             case "import" -> handleImport(sender, args);
             case "debug" -> handleDebug(sender);
             case "doctor" -> handleDoctor(sender);
@@ -121,6 +123,10 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             String subcommand = args[0].toLowerCase(Locale.ROOT);
             if ("buy".equals(subcommand)) {
                 suggestions.addAll(List.of("1", "5", "10", "25"));
+            } else if ("free".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("default", "playtime", "jobs", "quests", "votes"));
+            } else if ("shop".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("buy"));
             } else if ("info".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                     String name = onlinePlayer.getName();
@@ -143,10 +149,15 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             } else if ("lotteries".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("list", "select"));
             } else if ("transactions".equals(subcommand) && sender.hasPermission("lottery.admin")) {
-                addMatching(suggestions, args[1], List.of("1", "2", "3"));
+                addMatching(suggestions, args[1], List.of("1", "2", "3", "filter"));
             } else if ("log".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("player", "action", "date"));
             }
+        } else if (args.length == 3 && "shop".equalsIgnoreCase(args[0]) && "buy".equalsIgnoreCase(args[1])) {
+            addMatching(suggestions, args[2], List.of("default"));
+        } else if (args.length == 3 && "transactions".equalsIgnoreCase(args[0])
+            && "filter".equalsIgnoreCase(args[1]) && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[2], List.of("player", "type", "date", "details"));
         } else if (args.length == 3 && "lotteries".equalsIgnoreCase(args[0])
             && "select".equalsIgnoreCase(args[1]) && sender.hasPermission("lottery.admin")) {
             addMatching(suggestions, args[2], lotteryManager.getLotteryProfileIds());
@@ -195,6 +206,39 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         } catch (NumberFormatException exception) {
             MessageUtil.send(player, plugin.getMessagesConfig(sender), "messages.invalid-amount");
         }
+        return true;
+    }
+
+    private boolean handleFree(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+
+        String reason = args.length >= 2 ? args[1] : "default";
+        PurchaseResult result = lotteryManager.claimFreeTickets(player, reason);
+        MessageUtil.send(player, plugin.getMessagesConfig(player), result.messagePath(), result.placeholders());
+        return true;
+    }
+
+    private boolean handleShop(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+
+        if (args.length >= 3 && "buy".equalsIgnoreCase(args[1])) {
+            lotteryManager.buySeasonShopReward(player, args[2]);
+            return true;
+        }
+
+        lotteryManager.showSeasonShop(player);
         return true;
     }
 
@@ -260,6 +304,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private boolean handleDraw(CommandSender sender) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (lotteryManager.requireAdminConfirmation(sender, "force-draw")) {
             return true;
         }
 
@@ -339,6 +386,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
+        if (lotteryManager.requireAdminConfirmation(sender, "reset-round")) {
+            return true;
+        }
         lotteryManager.resetRound();
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.reset-success");
         return true;
@@ -405,9 +455,13 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleExport(CommandSender sender) {
+    private boolean handleExport(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (args.length >= 2 && "csv".equalsIgnoreCase(args[1])) {
+            lotteryManager.exportCsv(sender);
             return true;
         }
         lotteryManager.exportData(sender);
@@ -421,6 +475,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length < 2) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.import-usage");
+            return true;
+        }
+        if (lotteryManager.requireAdminConfirmation(sender, "import-data")) {
             return true;
         }
         lotteryManager.importData(sender, args[1]);
@@ -505,6 +562,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case "type" -> plugin.getConfig().set("settings.lottery-type", value);
                 case "fixedprize" -> plugin.getConfig().set("settings.fixed-prize-amount", Double.parseDouble(value));
                 case "profile" -> {
+                    if (lotteryManager.requireAdminConfirmation(sender, "profile-switch")) {
+                        return true;
+                    }
                     lotteryManager.setActiveLottery(sender, value);
                     return true;
                 }
@@ -532,6 +592,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         String seasonId = args.length >= 3 ? args[2] : "";
+        if (lotteryManager.requireAdminConfirmation(sender, "season-reset")) {
+            return true;
+        }
         lotteryManager.resetSeason(sender, seasonId);
         return true;
     }
@@ -589,6 +652,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.lotteries-usage");
                 return true;
             }
+            if (lotteryManager.requireAdminConfirmation(sender, "profile-switch")) {
+                return true;
+            }
             lotteryManager.setActiveLottery(sender, args[2]);
             return true;
         }
@@ -604,6 +670,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private boolean handleTransactions(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+
+        if (args.length >= 4 && "filter".equalsIgnoreCase(args[1])) {
+            int page = args.length >= 5 ? parsePositiveInt(args[4], 1) : 1;
+            lotteryManager.searchTransactions(sender, args[2], args[3], page);
             return true;
         }
 
@@ -690,6 +762,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-header");
         sendHelpLine(sender, "messages.help-line-status", "/lottery");
         sendHelpLine(sender, "messages.help-line-buy", "/lottery buy 1");
+        sendHelpLine(sender, "messages.help-line-free", "/lottery free");
+        sendHelpLine(sender, "messages.help-line-shop", "/lottery shop");
         sendHelpLine(sender, "messages.help-line-gui", "/lottery gui");
         sendHelpLine(sender, "messages.help-line-winners", "/lottery winners");
         sendHelpLine(sender, "messages.help-line-nextdraw", "/lottery nextdraw");
