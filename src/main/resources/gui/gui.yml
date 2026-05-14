@@ -195,6 +195,13 @@ stats-gui:
       lore:
         - "%top_current_tickets%"
       actions: []
+    last-winners:
+      slot: 31
+      material: "GOLDEN_APPLE"
+      name: "&6Letzte 10 Gewinner"
+      lore:
+        - "%last_winners%"
+      actions: []
     back:
       slot: 49
       material: "ARROW"

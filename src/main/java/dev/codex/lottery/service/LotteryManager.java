@@ -2573,6 +2573,8 @@ public final class LotteryManager {
                 expanded.addAll(formatTopDoubleStats(PlayerLotteryStats::getTotalWon, economyService::format));
             } else if ("%top_current_tickets%".equalsIgnoreCase(stripped)) {
                 expanded.addAll(formatCurrentTicketTop());
+            } else if ("%last_winners%".equalsIgnoreCase(stripped)) {
+                expanded.addAll(formatLastWinners());
             } else {
                 expanded.add(line);
             }
@@ -2710,6 +2712,23 @@ public final class LotteryManager {
             .limit(10)
             .map(entry -> new TopEntry(getCachedPlayerName(entry.getKey()), entry.getValue() + " Tickets"))
             .toList();
+    }
+
+    private List<String> formatLastWinners() {
+        if (winnerHistory.isEmpty()) {
+            return List.of(MessageUtil.color("&7Noch keine Gewinner."));
+        }
+
+        List<String> lines = new ArrayList<>();
+        int limit = Math.min(10, winnerHistory.size());
+        for (int index = 0; index < limit; index++) {
+            WinnerEntry entry = winnerHistory.get(index);
+            lines.add(MessageUtil.color("&e#" + (index + 1) + " " + entry.playerName()
+                + " &7- &f" + economyService.format(entry.amount())
+                + " &8(" + entry.wonAt().format(WINNER_DATE_FORMAT)
+                + ", " + entry.ticketsBought() + " Tickets)"));
+        }
+        return lines;
     }
 
     private String getCachedPlayerName(UUID playerId) {

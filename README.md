@@ -116,6 +116,7 @@ Ein voll ausgestattetes Lotterie-Plugin für Paper/Spigot mit Vault, GUI, Placeh
 - `%lottery_top_wins_1%`
 - `%lottery_top_wins_1_name%`
 - `%lottery_top_wins_1_value%`
+- GUI-Lore-Platzhalter `%last_winners%` für die letzten 10 Gewinner
 
 ## Konfiguration
 
@@ -192,7 +193,7 @@ Das Plugin speichert pro Spieler dauerhaft:
 - alle Gewinne zusammen
 - letzte Käufe und letzte Gewinne
 
-Die Statistik-Seite im GUI nutzt Lore-Platzhalter wie `%top_rounds_played%`, `%top_money_spent%`, `%top_wins%`, `%top_highest_win%`, `%top_total_won%` und `%top_current_tickets%`.
+Die Statistik-Seite im GUI nutzt Lore-Platzhalter wie `%top_rounds_played%`, `%top_money_spent%`, `%top_wins%`, `%top_highest_win%`, `%top_total_won%`, `%top_current_tickets%` und `%last_winners%`.
 
 ## Build
 
