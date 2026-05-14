@@ -1,4 +1,11 @@
+# Craftplay Lotterie - Deutsche Sprachdatei / German language file
+# DE: Jeder Eintrag unter messages ist eine anpassbare Nachricht. Farbcodes (&) und PlaceholderAPI-Platzhalter sind erlaubt.
+# EN: Every entry under messages is a configurable message. Color codes (&) and PlaceholderAPI placeholders are supported.
+# DE: Wichtige eigene Platzhalter: %player%, %amount%, %cost%, %pot%, %ticket_pot%, %base_pot%, %tickets_total%, %players%, %min_players%, %next_draw%, %time_left%, %winners%.
+# EN: Important built-in placeholders: %player%, %amount%, %cost%, %pot%, %ticket_pot%, %base_pot%, %tickets_total%, %players%, %min_players%, %next_draw%, %time_left%, %winners%.
+
 messages:
+  # DE: Prefix vor fast allen Plugin-Nachrichten. EN: Prefix in front of most plugin messages.
   prefix: "&6&lCraftplay Lotterie &8>> &r"
   no-permission: "&cDafür hast du keine Rechte."
   player-only: "&cDiesen Befehl kann nur ein Spieler nutzen."
@@ -14,6 +21,7 @@ messages:
   daily-spend-limit: "&cDu hast dein Tageslimit für Lotterie-Ausgaben erreicht. Limit: &e%limit%&c, heute genutzt: &e%used%&c."
   buy-success: "&aDu hast &e%amount% &aTicket(s) für &e%cost% &agekauft. Topf jetzt: &e%pot%&a."
   ticket-purchase-broadcast: "&e%player% &7hat &e%amount% &7Ticket(s) gekauft. Im Topf sind jetzt &e%pot%&7."
+  admin-purchase-warning: "&cAdmin-Warnung: &e%player% &7hat &e%amount% &7Ticket(s) für &e%cost% &7gekauft."
   status: "&7Topf: &e%pot%&7 | Ticket-Einsätze: &e%ticket_pot%&7 | Zusatzbetrag: &e%base_pot%&7 | Ticketpreis: &e%ticket_price%&7 | Ziehung: &e%draw_time%"
   your-tickets: "&7Deine Tickets in dieser Runde: &e%tickets%"
   your-chance: "&7Deine aktuelle Gewinnchance: &e%chance%"
@@ -65,6 +73,8 @@ messages:
   doctor-warn: "&c! &e%check%&7: &f%detail%"
   log-empty: "&7Das Admin-Log ist leer."
   log-header: "&6Admin-Log &7(Seite &e%page%&7/&e%pages%&7):"
+  log-search-header: "&6Admin-Log Suche &7(&e%filter%&7: &e%value%&7)"
+  log-search-empty: "&7Keine Logeinträge für &e%filter%&7: &e%value%&7 gefunden."
   log-entry: "&8- &e%time% &7| &f%action%"
   log-list-previous: "&e[Zurück]"
   log-list-next: "&e[Weiter]"
@@ -73,6 +83,13 @@ messages:
   setup-invalid: "&cUngültiger Setup-Wert."
   season-usage: "&cNutze: &e/lottery season reset [saison-id]"
   season-reset: "&aSaison-Statistik wurde zurückgesetzt. Aktuelle Saison: &e%season%"
+  preview-usage: "&cNutze: &e/lottery preview <gui|draw|holograms>"
+  preview-holograms-header: "&6Hologramm-Vorschau:"
+  preview-hologram-entry: "&8- &e%id%&7: &f%lines%"
+  lotteries-usage: "&cNutze: &e/lottery lotteries list"
+  lotteries-empty: "&7Es sind keine Lotterie-Profile in lotteries.yml eingetragen."
+  lotteries-header: "&6Lotterie-Profile:"
+  lotteries-entry: "&8- &e%id% &7| Name: &f%name% &7| Aktiv: &f%enabled%"
   join-reminder: "&7Aktueller Topf: &e%pot%&7. Nächste Ziehung in &e%time_left%&7. Kaufe Tickets mit &e/lottery buy <anzahl>"
   draw-announcement: "&6Die nächste Lotterie-Ziehung findet um &e%draw_time% &6statt. Aktueller Topf: &e%pot%&6."
   draw-announcement-button: "&a[Hier könnt ihr das Ticket kaufen]"
@@ -99,4 +116,4 @@ messages:
   help-line-gui: "&e/lottery gui &7- Öffnet das Lotterie-Menü"
   help-line-winners: "&e/lottery winners &7- Zeigt die letzten Gewinner"
   help-line-nextdraw: "&e/lottery nextdraw &7- Zeigt die nächste Ziehung"
-  help-line-admin: "&eAdmin: /lottery admin, draw, simulate, reload, setjackpot, addjackpot, reset, info, notifications, payments, backup, export, import, debug, doctor, log, setup, season, hologram"
+  help-line-admin: "&eAdmin: /lottery admin, draw, simulate, preview, editor, lotteries, reload, setjackpot, addjackpot, reset, info, notifications, payments, backup, export, import, debug, doctor, log, setup, season, hologram"

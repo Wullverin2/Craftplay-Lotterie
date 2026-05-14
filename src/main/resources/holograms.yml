@@ -1,10 +1,19 @@
+# Craftplay Lotterie - Hologramm-Konfiguration / Hologram configuration
+# DE: Diese Datei steuert TextDisplay-Hologramme, deren Vorlagen und gespeicherte Positionen.
+# EN: This file controls TextDisplay holograms, their templates and saved locations.
+
 settings:
+  # DE: Aktiviert alle Lotterie-Hologramme. EN: Enables all lottery holograms.
   enabled: true
+  # DE: Aktualisierungsintervall in Sekunden. EN: Update interval in seconds.
   update-interval-seconds: 30
+  # DE: true macht Text durch Blöcke sichtbar. EN: true makes text visible through blocks.
   see-through: false
+  # DE: true rendert Text mit Schatten. EN: true renders text with shadow.
   shadowed: true
 
 templates:
+  # DE: Standard-Countdown-Hologramm. EN: Default countdown hologram.
   countdown:
     lines:
       - "&6&lCraftplay Lotterie"
@@ -12,6 +21,8 @@ templates:
       - "&7Ziehung um &e%draw_time%"
       - "&7Topf: &e%pot%"
   statistics:
+    # DE: Für jede Statistikart gibt es einen eigenen Eintrag mit display-name und lines.
+    # EN: Each statistic type has its own entry with display-name and lines.
     rounds_played:
       display-name: "Am meisten mitgespielt"
       lines:
@@ -43,9 +54,9 @@ templates:
         - "&7Top 10 nach Einzelgewinn"
         - "%selected_top%"
     total_won:
-      display-name: "Gesammt gewonnen"
+      display-name: "Gesamt gewonnen"
       lines:
-        - "&6&lGesammt gewonnen"
+        - "&6&lGesamt gewonnen"
         - "&7Top 10 nach Gesamtgewinn"
         - "%selected_top%"
     current_tickets:

@@ -33,19 +33,20 @@ public final class LotteryPlugin extends JavaPlugin {
     private LotteryManager lotteryManager;
     private FileConfiguration guiConfig;
     private FileConfiguration hologramsConfig;
+    private FileConfiguration lotteriesConfig;
     private FileConfiguration playerLanguagesConfig;
     private File playerLanguagesFile;
     private File hologramsFile;
+    private File lotteriesFile;
     private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        getConfig().options().copyDefaults(true);
-        saveConfig();
         migrateConfigIfNeeded();
         saveResource("gui/gui.yml", false);
         saveResource("holograms.yml", false);
+        saveResource("lotteries.yml", false);
         saveResource("lang/de.yml", false);
         saveResource("lang/en.yml", false);
         loadCustomConfigs();
@@ -83,8 +84,6 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public void reloadPlugin() {
         reloadConfig();
-        getConfig().options().copyDefaults(true);
-        saveConfig();
         migrateConfigIfNeeded();
         loadCustomConfigs();
         if (lotteryManager != null) {
@@ -114,6 +113,18 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public FileConfiguration getHologramsConfig() {
         return hologramsConfig;
+    }
+
+    public FileConfiguration getLotteriesConfig() {
+        return lotteriesConfig;
+    }
+
+    public void saveLotteriesConfig() {
+        try {
+            lotteriesConfig.save(lotteriesFile);
+        } catch (IOException exception) {
+            getLogger().severe("Could not save lotteries.yml: " + exception.getMessage());
+        }
     }
 
     public void saveHologramsConfig() {
@@ -194,6 +205,8 @@ public final class LotteryPlugin extends JavaPlugin {
         guiConfig = loadCustomConfigWithDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml"));
         hologramsFile = new File(getDataFolder(), "holograms.yml");
         hologramsConfig = loadCustomConfigWithDefaults("holograms.yml", hologramsFile);
+        lotteriesFile = new File(getDataFolder(), "lotteries.yml");
+        lotteriesConfig = loadCustomConfigWithDefaults("lotteries.yml", lotteriesFile);
         playerLanguagesFile = new File(getDataFolder(), "player-languages.yml");
         playerLanguagesConfig = YamlConfiguration.loadConfiguration(playerLanguagesFile);
         loadLanguageConfigs();
@@ -225,9 +238,8 @@ public final class LotteryPlugin extends JavaPlugin {
                 new InputStreamReader(inputStream, StandardCharsets.UTF_8));
             config.setDefaults(defaults);
             config.options().copyDefaults(true);
-            config.save(file);
         } catch (IOException exception) {
-            getLogger().warning("Could not merge defaults into " + file.getName() + ": " + exception.getMessage());
+            getLogger().warning("Could not read defaults for " + file.getName() + ": " + exception.getMessage());
         }
         return config;
     }

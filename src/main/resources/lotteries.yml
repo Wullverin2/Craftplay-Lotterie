@@ -1,0 +1,31 @@
+# DE: Diese Datei bereitet mehrere Lotterie-Profile vor. Aktuell nutzt das Plugin standardmäßig das Profil "default"; eigene Profile können hier vorgeplant und dokumentiert werden.
+# EN: This file prepares multiple lottery profiles. The plugin currently uses the "default" profile by default; custom profiles can be planned and documented here.
+
+settings:
+  # DE: Aktiviert die Profilverwaltung für zukünftige Multi-Lotterie-Setups. false bedeutet: normale Einzel-Lotterie aus config.yml.
+  # EN: Enables profile management for future multi-lottery setups. false means: normal single lottery from config.yml.
+  enabled: false
+
+profiles:
+  default:
+    # DE: Ob dieses Profil in Listen angezeigt und später auswählbar sein soll.
+    # EN: Whether this profile is shown in lists and can later be selected.
+    enabled: true
+    # DE: Anzeigename des Profils im Chat oder in Admin-Ausgaben.
+    # EN: Display name of this profile in chat or admin output.
+    display-name: "Hauptlotterie"
+    # DE: Optionale Berechtigung für diese Lotterie. Leer bedeutet keine Extra-Berechtigung.
+    # EN: Optional permission for this lottery. Empty means no extra permission.
+    permission: ""
+    # DE: Optionaler GUI-Titel für dieses Profil. Leer bedeutet Titel aus gui/gui.yml verwenden.
+    # EN: Optional GUI title for this profile. Empty means use the title from gui/gui.yml.
+    gui-title: ""
+    # DE: Optionaler Ticketpreis nur für dieses Profil. -1 bedeutet Wert aus config.yml verwenden.
+    # EN: Optional ticket price only for this profile. -1 means use the value from config.yml.
+    ticket-price: -1
+    # DE: Optionaler Zusatzbetrag für den Topf. -1 bedeutet Wert aus config.yml verwenden.
+    # EN: Optional base amount for the pot. -1 means use the value from config.yml.
+    additional-pot-amount: -1
+    # DE: Optionale Ziehzeiten im Format HH:mm. Leer bedeutet Zeitplan aus config.yml verwenden.
+    # EN: Optional draw times in HH:mm format. Empty means use the schedule from config.yml.
+    draw-times: []

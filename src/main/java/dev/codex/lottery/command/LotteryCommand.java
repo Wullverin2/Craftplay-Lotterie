@@ -22,7 +22,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS = List.of(
         "help", "buy", "gui", "jackpot", "winners", "stats", "nextdraw",
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
-        "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate", "season"
+        "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
+        "season", "preview", "editor", "lotteries"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -88,6 +89,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "log" -> handleLog(sender, args);
             case "setup" -> handleSetup(sender, args);
             case "season" -> handleSeason(sender, args);
+            case "preview" -> handlePreview(sender, args);
+            case "editor" -> handleEditor(sender);
+            case "lotteries" -> handleLotteries(sender, args);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -129,6 +133,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup"));
             } else if ("season".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("reset"));
+            } else if ("preview".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("gui", "draw", "holograms"));
+            } else if ("lotteries".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("list"));
+            } else if ("log".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("player", "action", "date"));
             }
         } else if (args.length == 3 && "notifications".equalsIgnoreCase(args[0]) && sender.hasPermission("lottery.admin")) {
             if ("clear".equalsIgnoreCase(args[1])) {
@@ -430,6 +440,18 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
+
+        if (args.length >= 4) {
+            int page = parsePositiveInt(args[3], 1);
+            lotteryManager.searchAdminLog(sender, args[1], args[2], page);
+            return true;
+        }
+
+        if (args.length >= 3 && !isInteger(args[1])) {
+            lotteryManager.searchAdminLog(sender, args[1], args[2], 1);
+            return true;
+        }
+
         int page = args.length >= 2 ? parsePositiveInt(args[1], 1) : 1;
         lotteryManager.listAdminLog(sender, page);
         return true;
@@ -498,6 +520,61 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handlePreview(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (args.length < 2) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.preview-usage");
+            return true;
+        }
+
+        String target = args[1].toLowerCase(Locale.ROOT);
+        switch (target) {
+            case "gui" -> {
+                if (!(sender instanceof Player player)) {
+                    MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+                    return true;
+                }
+                lotteryManager.openMenu(player);
+            }
+            case "draw" -> {
+                DrawResult result = lotteryManager.simulateDraw(sender);
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), result.adminMessagePath(), result.placeholders());
+            }
+            case "holograms" -> lotteryManager.previewHolograms(sender);
+            default -> MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.preview-usage");
+        }
+        return true;
+    }
+
+    private boolean handleEditor(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.setup-usage");
+            return true;
+        }
+        lotteryManager.openAdminMenu(player);
+        return true;
+    }
+
+    private boolean handleLotteries(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (args.length >= 2 && !"list".equalsIgnoreCase(args[1])) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.lotteries-usage");
+            return true;
+        }
+        lotteryManager.listLotteries(sender);
+        return true;
+    }
+
     private boolean handleHologram(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
@@ -555,6 +632,15 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return values;
     }
 
+    private boolean isInteger(String value) {
+        try {
+            Integer.parseInt(value.trim());
+            return true;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
     private boolean requireUsePermission(CommandSender sender) {
         if (sender.hasPermission("lottery.use")) {
             return true;
@@ -578,7 +664,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private boolean isSubcommandAllowed(CommandSender sender, String subcommand) {
         return switch (subcommand) {
             case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
-                "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season" -> sender.hasPermission("lottery.admin");
+                "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
+                "preview", "editor", "lotteries" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }

@@ -1,26 +1,58 @@
+# Craftplay Lotterie - Hauptkonfiguration / Main configuration
+# DE: Jede Einstellung hat eine kurze deutsche und englische Erklärung direkt darüber.
+# EN: Every setting has a short German and English explanation directly above it.
+
+# DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
+# EN: Internal version number for automatic migrations. Only change this if you know exactly why.
 config-version: 3
 
 settings:
+  # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.
+  # EN: Timezone used for draws, countdowns, daily limits and statistics.
   timezone: "Europe/Vienna"
+  # DE: Preis für ein einzelnes Ticket.
+  # EN: Price for one ticket.
   ticket-price: 250.0
+  # DE: Fester Zusatzbetrag im Topf. Dieser wird nur für die aktuelle Anzeige/Ziehung addiert und nicht übertragen.
+  # EN: Fixed base amount in the pot. It is only added for the current display/draw and is not carried over.
   additional-pot-amount: 1000.0
+  # DE: Maximale Ticketanzahl pro Kaufvorgang.
+  # EN: Maximum number of tickets per purchase action.
   tickets-per-purchase-max: 64
+  # DE: Maximale Ticketanzahl, die ein Spieler in der aktuellen Runde besitzen darf.
+  # EN: Maximum number of tickets a player may own in the current round.
   tickets-per-player-max: 256
+  # DE: Mindestanzahl unterschiedlicher Spieler, damit eine Ziehung stattfindet.
+  # EN: Minimum number of unique players required for a draw.
   minimum-players-to-draw: 1
+  # DE: Steuer/Abzug vom Ticketpreis als Dezimalwert. 0.05 bedeutet 5% gehen nicht in den Topf.
+  # EN: Tax/deduction from ticket price as decimal value. 0.05 means 5% does not go into the pot.
   tax-rate: 0.05
+  # DE: Sendet eine Chat-Nachricht, wenn jemand Tickets kauft.
+  # EN: Broadcasts a chat message when someone buys tickets.
   broadcast-ticket-purchases: true
   draw-time:
+    # DE: Stunde der einzelnen Standardziehung, wenn mehrere Ziehungen deaktiviert sind.
+    # EN: Hour of the single default draw when multiple draws are disabled.
     hour: 20
+    # DE: Minute der einzelnen Standardziehung, wenn mehrere Ziehungen deaktiviert sind.
+    # EN: Minute of the single default draw when multiple draws are disabled.
     minute: 0
   draw-schedule:
-    # false = nur die einzelne Ziehung aus settings.draw-time verwenden
+    # DE: true nutzt alle Zeiten aus settings.draw-schedule.times. false nutzt nur settings.draw-time.
+    # EN: true uses all times from settings.draw-schedule.times. false uses only settings.draw-time.
     multiple-draws-enabled: false
-    # Wird nur genutzt, wenn multiple-draws-enabled true ist.
+    # DE: Liste zusätzlicher Ziehzeiten im Format HH:mm, wenn multiple-draws-enabled true ist.
+    # EN: List of additional draw times in HH:mm format when multiple-draws-enabled is true.
     times:
       - "20:00"
       - "22:00"
     weekdays:
+      # DE: true beschränkt Ziehungen auf die unten eingetragenen Wochentage.
+      # EN: true restricts draws to the weekdays listed below.
       enabled: false
+      # DE: Erlaubte Wochentage auf Englisch: MONDAY bis SUNDAY.
+      # EN: Allowed weekdays in English: MONDAY to SUNDAY.
       days:
         - "MONDAY"
         - "TUESDAY"
@@ -29,126 +61,293 @@ settings:
         - "FRIDAY"
         - "SATURDAY"
         - "SUNDAY"
+  # DE: Anzahl gespeicherter Gewinner in der Historie und GUI-Anzeige.
+  # EN: Number of winners kept in history and GUI display.
   history-size: 10
+  # DE: Sendet eine Nachricht, wenn bei der Ziehung keine Tickets vorhanden sind.
+  # EN: Broadcasts a message when a draw has no tickets.
   broadcast-no-players: true
+  # DE: Zahlt Ticketkosten zurück, wenn zu wenige Spieler für die Ziehung vorhanden sind.
+  # EN: Refunds ticket costs when there are not enough players for the draw.
   refund-on-not-enough-players: true
 
 storage:
-  # yaml, sqlite oder mysql
+  # DE: Speichertyp. yaml ist einfach, sqlite/mysql sind für größere Server geeignet.
+  # EN: Storage type. yaml is simple, sqlite/mysql are useful for larger servers.
   type: "yaml"
   sqlite:
+    # DE: Dateiname der SQLite-Datenbank im Plugin-Ordner.
+    # EN: File name of the SQLite database inside the plugin folder.
     file: "storage.db"
   mysql:
+    # DE: MySQL-Host oder IP-Adresse.
+    # EN: MySQL host or IP address.
     host: "localhost"
+    # DE: MySQL-Port.
+    # EN: MySQL port.
     port: 3306
+    # DE: Name der Datenbank.
+    # EN: Database name.
     database: "craftplay_lottery"
+    # DE: MySQL-Benutzername.
+    # EN: MySQL username.
     username: "root"
+    # DE: MySQL-Passwort.
+    # EN: MySQL password.
     password: ""
 
 payments:
   retry:
+    # DE: Versucht fehlgeschlagene Offline-Auszahlungen regelmäßig erneut.
+    # EN: Regularly retries failed offline payouts.
     enabled: true
+    # DE: Abstand zwischen automatischen Zahlungs-Retrys in Minuten.
+    # EN: Interval between automatic payment retries in minutes.
     interval-minutes: 10
 
 purchase-confirmation:
+  # DE: Aktiviert eine zweite Bestätigung bei teuren Käufen.
+  # EN: Enables a second confirmation for expensive purchases.
   enabled: true
+  # DE: Ab diesem Gesamtpreis muss der Spieler den Kauf erneut bestätigen.
+  # EN: From this total price onward the player must confirm the purchase again.
   min-total-cost: 10000.0
+  # DE: Zeitfenster für die Bestätigung in Sekunden.
+  # EN: Confirmation window in seconds.
   timeout-seconds: 20
 
 security:
+  # DE: Wartezeit zwischen zwei Käufen pro Spieler in Sekunden. 0 deaktiviert den Cooldown.
+  # EN: Wait time between purchases per player in seconds. 0 disables the cooldown.
   purchase-cooldown-seconds: 0
+  # DE: Tageslimit für gekaufte Tickets pro Spieler. 0 deaktiviert das Limit.
+  # EN: Daily limit for bought tickets per player. 0 disables the limit.
   daily-ticket-limit: 0
+  # DE: Tageslimit für ausgegebenes Geld pro Spieler. 0 deaktiviert das Limit.
+  # EN: Daily spending limit per player. 0 disables the limit.
   daily-spend-limit: 0.0
+  # DE: Ab dieser Ticketanzahl bei einem Kauf erhalten Admins eine Warnung. 0 deaktiviert diese Warnung.
+  # EN: Admins are warned from this ticket amount per purchase. 0 disables this warning.
+  admin-warning-ticket-threshold: 0
+  # DE: Ab diesem Kaufpreis erhalten Admins eine Warnung. 0 deaktiviert diese Warnung.
+  # EN: Admins are warned from this purchase cost. 0 disables this warning.
+  admin-warning-spend-threshold: 0.0
 
 winners:
+  # DE: Aktiviert mehrere Gewinner pro Ziehung.
+  # EN: Enables multiple winners per draw.
   multiple-enabled: false
-  # Werte werden als Verteilungsanteile gelesen. [70, 20, 10] ergibt Platz 1/2/3.
+  # DE: Gewinnanteile pro Platz. [70, 20, 10] bedeutet Platz 1/2/3 erhalten 70/20/10 Prozent der verteilten Summe.
+  # EN: Prize shares per rank. [70, 20, 10] means rank 1/2/3 receive 70/20/10 percent of the distributed amount.
   prize-shares:
     - 100.0
+  # DE: Aktiviert feste Auszahlungen statt prozentualer Gewinnanteile.
+  # EN: Enables fixed payouts instead of percentage-based prize shares.
+  fixed-payouts-enabled: false
+  # DE: Feste Beträge pro Platz. Beispiel [1000, 500, 250] zahlt Platz 1/2/3 diese Beträge.
+  # EN: Fixed amounts per rank. Example [1000, 500, 250] pays rank 1/2/3 these amounts.
+  fixed-payouts:
+    - 1000.0
+  # DE: true verhindert, dass feste Auszahlungen zusammen mehr als den Topf auszahlen.
+  # EN: true prevents fixed payouts from paying more than the pot in total.
+  fixed-payouts-cap-to-pot: true
+  # DE: true gibt einen Restbetrag bei festen Auszahlungen an Platz 1.
+  # EN: true gives leftover money from fixed payouts to rank 1.
+  fixed-payouts-add-leftover-to-first: true
 
 jackpot-boost:
+  # DE: Aktiviert einen Multiplikator auf den Anteil des Ticketpreises, der in den Topf geht.
+  # EN: Enables a multiplier on the part of ticket price that goes into the pot.
   enabled: false
+  # DE: Multiplikator für Ticket-Einsätze. 1.25 bedeutet 25% mehr Topfaufbau.
+  # EN: Multiplier for ticket contributions. 1.25 means 25% more pot growth.
   multiplier: 1.25
 
 seasons:
+  # DE: Aktuelle Saison-ID für saisonale Statistiken.
+  # EN: Current season id for seasonal statistics.
   current-id: "default"
+  auto:
+    # DE: Aktiviert automatische Saisonwechsel.
+    # EN: Enables automatic season rotation.
+    enabled: false
+    # DE: Zeitraum für automatische Saison-IDs: daily, weekly, monthly oder yearly.
+    # EN: Period for automatic season ids: daily, weekly, monthly or yearly.
+    period: "monthly"
+    # DE: Konsolenbefehle vor dem Saisonreset. Platzhalter: %old_season%, %new_season%.
+    # EN: Console commands before the season reset. Placeholders: %old_season%, %new_season%.
+    commands-before-reset: []
+    # DE: Konsolenbefehle nach dem Saisonreset. Platzhalter: %old_season%, %new_season%.
+    # EN: Console commands after the season reset. Placeholders: %old_season%, %new_season%.
+    commands-after-reset: []
 
 backups:
   auto-after-draw:
+    # DE: Erstellt nach jeder Ziehung automatisch ein ZIP-Backup.
+    # EN: Automatically creates a ZIP backup after every draw.
     enabled: true
 
 eligibility:
   permission:
+    # DE: Aktiviert eine Teilnahme-Berechtigung.
+    # EN: Enables a participation permission.
     enabled: false
+    # DE: Spieler brauchen diese Permission, wenn permission.enabled true ist.
+    # EN: Players need this permission when permission.enabled is true.
     node: "lottery.participate"
   worlds:
+    # DE: Beschränkt Ticketkäufe auf bestimmte Welten.
+    # EN: Restricts ticket purchases to specific worlds.
     enabled: false
+    # DE: Erlaubte Welten für Ticketkäufe.
+    # EN: Worlds allowed for ticket purchases.
     allowed:
       - "world"
+  # DE: Mindestspielzeit in Minuten, bevor Spieler teilnehmen dürfen. 0 deaktiviert die Prüfung.
+  # EN: Minimum playtime in minutes before players may join. 0 disables the check.
   min-playtime-minutes: 0
 
 admin-log:
+  # DE: Aktiviert das Admin-Log für wichtige Aktionen.
+  # EN: Enables the admin log for important actions.
   enabled: true
+  # DE: Maximale Anzahl gespeicherter Logeinträge.
+  # EN: Maximum number of stored log entries.
   max-entries: 500
 
 rewards:
+  # DE: Konsolenbefehle, die für jeden Gewinner ausgeführt werden.
+  # EN: Console commands executed for every winner.
   commands-on-win: []
-  # Beispiel:
-  # commands-on-win:
-  #   - "broadcast %player% hat zusätzlich einen Bonus gewonnen!"
+  commands-by-rank:
+    # DE: Befehle nur für Platz 1.
+    # EN: Commands only for rank 1.
+    "1": []
+    # DE: Befehle nur für Platz 2.
+    # EN: Commands only for rank 2.
+    "2": []
+    # DE: Befehle nur für Platz 3.
+    # EN: Commands only for rank 3.
+    "3": []
   packages:
+    # DE: Aktiviert zufällige Bonuspakete für Gewinner.
+    # EN: Enables random bonus packages for winners.
     enabled: false
     items:
       default:
+        # DE: Interner/angezeigter Name des Bonuspakets.
+        # EN: Internal/display name of this bonus package.
         name: "Standard Bonus"
+        # DE: Gewichtung für die zufällige Auswahl. Höher bedeutet wahrscheinlicher.
+        # EN: Weight for random selection. Higher means more likely.
         weight: 100
+        # DE: Konsolenbefehle, die bei diesem Bonuspaket ausgeführt werden.
+        # EN: Console commands executed for this bonus package.
         commands:
           - "broadcast %player% hat das Bonuspaket %reward_package% erhalten!"
 
 draw-animation:
+  # DE: Aktiviert Countdown-Nachrichten vor der Gewinnerverkündung.
+  # EN: Enables countdown messages before winner reveal.
   enabled: true
+  # DE: Sekundenwerte, die im Countdown angezeigt werden.
+  # EN: Second values shown in the countdown.
   countdown: [5, 4, 3, 2, 1]
+  # DE: Abstand zwischen Countdown-Schritten in Sekunden.
+  # EN: Delay between countdown steps in seconds.
   step-seconds: 1
 
 language:
+  # DE: Standardsprache für Konsole und Spieler ohne eigene Auswahl.
+  # EN: Default language for console and players without a custom selection.
   default: "de"
 
 notifications:
   join-reminder:
+    # DE: Sendet Spielern beim Join einen Lotterie-Hinweis.
+    # EN: Sends players a lottery reminder when they join.
     enabled: true
   win-effects:
+    # DE: Aktiviert Sound/Titel bei Gewinnern.
+    # EN: Enables sound/title effects for winners.
     enabled: true
+    # DE: Bukkit-Soundname für den Gewinn.
+    # EN: Bukkit sound name for the win.
     sound: "ENTITY_PLAYER_LEVELUP"
+    # DE: Titeltext beim Gewinn.
+    # EN: Title text shown on win.
     title: "&6&lLottery"
+    # DE: Untertitel beim Gewinn.
+    # EN: Subtitle shown on win.
     subtitle: "&e%player% &7hat &6%amount% &7gewonnen!"
 
 webhook:
+  # DE: Aktiviert Discord/Webhook-Nachrichten.
+  # EN: Enables Discord/webhook messages.
   enabled: false
+  # DE: Ziel-URL des Webhooks.
+  # EN: Target URL of the webhook.
   url: ""
+  # DE: Anzeigename des Webhook-Bots.
+  # EN: Display name of the webhook bot.
   username: "Lottery"
+  # DE: Standardnachricht für Gewinner-Webhooks.
+  # EN: Default message for winner webhooks.
   message: "**Lottery:** %player% hat %amount% mit %tickets% Ticket(s) gewonnen. Nächste Ziehung: %next_draw%"
   embed:
+    # DE: Aktiviert Embed-Format für Gewinner-Webhooks.
+    # EN: Enables embed format for winner webhooks.
     enabled: true
+    # DE: Embed-Titel.
+    # EN: Embed title.
     title: "Craftplay Lotterie Gewinner"
+    # DE: Embed-Beschreibung.
+    # EN: Embed description.
     description: "%player% hat den Lotterie-Topf gewonnen."
+    # DE: Embed-Farbe als Dezimalzahl.
+    # EN: Embed color as decimal number.
     color: 16766720
   events:
     ticket-purchase:
+      # DE: Aktiviert Webhook für Ticketkäufe.
+      # EN: Enables webhook for ticket purchases.
       enabled: false
+      # DE: Nachricht für Ticketkauf-Webhooks.
+      # EN: Message for ticket purchase webhooks.
       message: "**Ticketkauf:** %player% hat %amount% Ticket(s) für %cost% gekauft. Topf: %pot%"
     draw-not-enough-players:
+      # DE: Aktiviert Webhook, wenn zu wenige Spieler dabei waren.
+      # EN: Enables webhook when there were not enough players.
       enabled: false
+      # DE: Nachricht für fehlgeschlagene Ziehungen wegen zu weniger Spieler.
+      # EN: Message for failed draws due to not enough players.
       message: "**Lotterie:** Zu wenige Spieler. Rückerstattung: %refunded% an %refunded_players% Spieler."
     draw-no-players:
+      # DE: Aktiviert Webhook, wenn keine Tickets vorhanden waren.
+      # EN: Enables webhook when no tickets existed.
       enabled: false
+      # DE: Nachricht für Ziehungen ohne Teilnehmer.
+      # EN: Message for draws without participants.
       message: "**Lotterie:** Keine Tickets vorhanden, Ziehung ohne Gewinner beendet."
 
 announcements:
   draw:
+    # DE: Aktiviert regelmäßige Chat-Ankündigungen der nächsten Ziehung.
+    # EN: Enables recurring chat announcements for the next draw.
     enabled: true
+    # DE: Abstand zwischen Ankündigungen in Minuten.
+    # EN: Interval between announcements in minutes.
     interval-minutes: 30
+    # DE: Verzögerung nach Serverstart/Reload bis zur ersten Ankündigung in Sekunden.
+    # EN: Delay after server start/reload before the first announcement in seconds.
     start-delay-seconds: 60
     buy-button:
+      # DE: Aktiviert den anklickbaren Kaufbutton in der Ankündigung.
+      # EN: Enables the clickable buy button in the announcement.
       enabled: true
+      # DE: Text des Kaufbuttons. Leer nutzt messages.draw-announcement-button aus der Sprachdatei.
+      # EN: Text of the buy button. Empty uses messages.draw-announcement-button from the language file.
       text: "&a[Hier könnt ihr das Ticket kaufen]"
+      # DE: Befehl, der beim Klick ausgeführt wird.
+      # EN: Command executed when clicking the button.
       command: "/lottery gui"

@@ -1,8 +1,29 @@
+# Craftplay Lotterie - GUI-Konfiguration / GUI configuration
+# DE: Diese Datei steuert alle Inventar-Menüs. Texte unterstützen Farbcodes (&) und PlaceholderAPI-Platzhalter.
+# EN: This file controls all inventory menus. Texts support color codes (&) and PlaceholderAPI placeholders.
+# DE: Gemeinsame Item-Einstellungen:
+# DE: slot = einzelner Platz, slots = mehrere Plätze/Ranges, material = Bukkit-Material, head-database-id = HeadDatabase-Kopf,
+# DE: skull-owner = Spielername für Player-Heads, name/lore = Anzeige, buy-amount = Ticketmenge am Kaufbutton,
+# DE: refresh-after-click = GUI nach Klick aktualisieren, actions = Klickaktionen.
+# EN: Shared item settings:
+# EN: slot = one slot, slots = multiple slots/ranges, material = Bukkit material, head-database-id = HeadDatabase head,
+# EN: skull-owner = player name for player heads, name/lore = display, buy-amount = ticket amount on buy buttons,
+# EN: refresh-after-click = refresh GUI after click, actions = click actions.
+# DE: Aktionen: buy:<anzahl>, close, open-stats, open-personal-stats, open-language, open-admin, open-main,
+# DE: force-draw, reload-plugin, reset-round, language:<code>, player-command:<befehl>, console-command:<befehl>, message:<text>.
+# EN: Actions: buy:<amount>, close, open-stats, open-personal-stats, open-language, open-admin, open-main,
+# EN: force-draw, reload-plugin, reset-round, language:<code>, player-command:<command>, console-command:<command>, message:<text>.
+
 gui:
+  # DE: Aktiviert das Hauptmenü. EN: Enables the main menu.
   enabled: true
+  # DE: Titel des Hauptmenüs. EN: Title of the main menu.
   title: "&6&lCraftplay Lotterie"
+  # DE: Inventargröße, muss ein Vielfaches von 9 sein. EN: Inventory size, must be a multiple of 9.
   size: 36
+  # DE: Standard-Füllmaterial für leere Slots. EN: Default filler material for empty slots.
   filler-material: "BLACK_STAINED_GLASS_PANE"
+  # DE: Alle Buttons/Dekoitems des Hauptmenüs. EN: All buttons/decorative items in the main menu.
   items:
     top-decoration:
       slots: ["0-8", 27, 28, 29, 30, 32, 33]
@@ -136,10 +157,15 @@ gui:
         - "close"
 
 stats-gui:
+  # DE: Aktiviert das Statistik-Untermenü. EN: Enables the statistics submenu.
   enabled: true
+  # DE: Titel des Statistik-Menüs. EN: Title of the statistics menu.
   title: "&6&lLotterie Statistik"
+  # DE: Größe des Statistik-Menüs. EN: Size of the statistics menu.
   size: 54
+  # DE: Füllmaterial im Statistik-Menü. EN: Filler material in the statistics menu.
   filler-material: "GRAY_STAINED_GLASS_PANE"
+  # DE: Buttons/Listen der Statistikseite. EN: Buttons/lists on the statistics page.
   items:
     decoration:
       slots: ["0-8", "45-53"]
@@ -212,10 +238,15 @@ stats-gui:
         - "open-main"
 
 personal-stats-gui:
+  # DE: Aktiviert das persönliche Statistik-Menü. EN: Enables the personal statistics menu.
   enabled: true
+  # DE: Titel des persönlichen Statistik-Menüs. EN: Title of the personal statistics menu.
   title: "&6&lDeine Lotterie Statistik"
+  # DE: Größe des persönlichen Statistik-Menüs. EN: Size of the personal statistics menu.
   size: 36
+  # DE: Füllmaterial im persönlichen Statistik-Menü. EN: Filler material in the personal statistics menu.
   filler-material: "BLUE_STAINED_GLASS_PANE"
+  # DE: Buttons/Anzeigen der persönlichen Statistikseite. EN: Buttons/displays on the personal statistics page.
   items:
     decoration:
       slots: ["0-8", "27-35"]
@@ -268,10 +299,15 @@ personal-stats-gui:
         - "close"
 
 language-gui:
+  # DE: Aktiviert das Sprachmenü. EN: Enables the language menu.
   enabled: true
+  # DE: Titel des Sprachmenüs. EN: Title of the language menu.
   title: "&6&lSprache"
+  # DE: Größe des Sprachmenüs. EN: Size of the language menu.
   size: 27
+  # DE: Füllmaterial im Sprachmenü. EN: Filler material in the language menu.
   filler-material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+  # DE: Buttons zum Wechseln der Sprache. EN: Buttons for changing language.
   items:
     german:
       slot: 11
@@ -299,10 +335,15 @@ language-gui:
         - "open-main"
 
 admin-gui:
+  # DE: Aktiviert das Admin-Menü. EN: Enables the admin menu.
   enabled: true
+  # DE: Titel des Admin-Menüs. EN: Title of the admin menu.
   title: "&c&lLotterie Admin"
+  # DE: Größe des Admin-Menüs. EN: Size of the admin menu.
   size: 36
+  # DE: Füllmaterial im Admin-Menü. EN: Filler material in the admin menu.
   filler-material: "RED_STAINED_GLASS_PANE"
+  # DE: Admin-Buttons für Ziehung, Reload, Reset und Navigation. EN: Admin buttons for draw, reload, reset and navigation.
   items:
     status:
       slot: 10
