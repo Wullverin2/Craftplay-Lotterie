@@ -1,0 +1,154 @@
+config-version: 3
+
+settings:
+  timezone: "Europe/Vienna"
+  ticket-price: 250.0
+  additional-pot-amount: 1000.0
+  tickets-per-purchase-max: 64
+  tickets-per-player-max: 256
+  minimum-players-to-draw: 1
+  tax-rate: 0.05
+  broadcast-ticket-purchases: true
+  draw-time:
+    hour: 20
+    minute: 0
+  draw-schedule:
+    # false = nur die einzelne Ziehung aus settings.draw-time verwenden
+    multiple-draws-enabled: false
+    # Wird nur genutzt, wenn multiple-draws-enabled true ist.
+    times:
+      - "20:00"
+      - "22:00"
+    weekdays:
+      enabled: false
+      days:
+        - "MONDAY"
+        - "TUESDAY"
+        - "WEDNESDAY"
+        - "THURSDAY"
+        - "FRIDAY"
+        - "SATURDAY"
+        - "SUNDAY"
+  history-size: 10
+  broadcast-no-players: true
+  refund-on-not-enough-players: true
+
+storage:
+  # yaml, sqlite oder mysql
+  type: "yaml"
+  sqlite:
+    file: "storage.db"
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "craftplay_lottery"
+    username: "root"
+    password: ""
+
+payments:
+  retry:
+    enabled: true
+    interval-minutes: 10
+
+purchase-confirmation:
+  enabled: true
+  min-total-cost: 10000.0
+  timeout-seconds: 20
+
+security:
+  purchase-cooldown-seconds: 0
+  daily-ticket-limit: 0
+  daily-spend-limit: 0.0
+
+winners:
+  multiple-enabled: false
+  # Werte werden als Verteilungsanteile gelesen. [70, 20, 10] ergibt Platz 1/2/3.
+  prize-shares:
+    - 100.0
+
+jackpot-boost:
+  enabled: false
+  multiplier: 1.25
+
+seasons:
+  current-id: "default"
+
+backups:
+  auto-after-draw:
+    enabled: true
+
+eligibility:
+  permission:
+    enabled: false
+    node: "lottery.participate"
+  worlds:
+    enabled: false
+    allowed:
+      - "world"
+  min-playtime-minutes: 0
+
+admin-log:
+  enabled: true
+  max-entries: 500
+
+rewards:
+  commands-on-win: []
+  # Beispiel:
+  # commands-on-win:
+  #   - "broadcast %player% hat zusaetzlich einen Bonus gewonnen!"
+  packages:
+    enabled: false
+    items:
+      default:
+        name: "Standard Bonus"
+        weight: 100
+        commands:
+          - "broadcast %player% hat das Bonuspaket %reward_package% erhalten!"
+
+draw-animation:
+  enabled: true
+  countdown: [5, 4, 3, 2, 1]
+  step-seconds: 1
+
+language:
+  default: "de"
+
+notifications:
+  join-reminder:
+    enabled: true
+  win-effects:
+    enabled: true
+    sound: "ENTITY_PLAYER_LEVELUP"
+    title: "&6&lLottery"
+    subtitle: "&e%player% &7hat &6%amount% &7gewonnen!"
+
+webhook:
+  enabled: false
+  url: ""
+  username: "Lottery"
+  message: "**Lottery:** %player% hat %amount% mit %tickets% Ticket(s) gewonnen. Naechste Ziehung: %next_draw%"
+  embed:
+    enabled: true
+    title: "Craftplay Lotterie Gewinner"
+    description: "%player% hat den Lotterie-Topf gewonnen."
+    color: 16766720
+  events:
+    ticket-purchase:
+      enabled: false
+      message: "**Ticketkauf:** %player% hat %amount% Ticket(s) fuer %cost% gekauft. Topf: %pot%"
+    draw-not-enough-players:
+      enabled: false
+      message: "**Lotterie:** Zu wenige Spieler. Rueckerstattung: %refunded% an %refunded_players% Spieler."
+    draw-no-players:
+      enabled: false
+      message: "**Lotterie:** Keine Tickets vorhanden, Ziehung ohne Gewinner beendet."
+
+announcements:
+  draw:
+    enabled: true
+    interval-minutes: 30
+    start-delay-seconds: 60
+    buy-button:
+      enabled: true
+      text: "&a[Hier könnt ihr das Ticket kaufen]"
+      command: "/lottery gui"

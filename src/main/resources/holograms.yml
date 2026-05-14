@@ -1,0 +1,64 @@
+settings:
+  enabled: true
+  update-interval-seconds: 30
+  see-through: false
+  shadowed: true
+
+templates:
+  countdown:
+    lines:
+      - "&6&lCraftplay Lotterie"
+      - "&7Nächste Ziehung in &e%time_left%"
+      - "&7Ziehung um &e%draw_time%"
+      - "&7Topf: &e%pot%"
+  statistics:
+    rounds_played:
+      display-name: "Am meisten mitgespielt"
+      lines:
+        - "&6&lAm meisten mitgespielt"
+        - "&7Top 10 nach gespielten Runden"
+        - "%selected_top%"
+    tickets_bought:
+      display-name: "Meiste gekaufte Tickets"
+      lines:
+        - "&6&lMeiste Tickets"
+        - "&7Top 10 nach gekauften Tickets"
+        - "%selected_top%"
+    money_spent:
+      display-name: "Gesamtausgaben"
+      lines:
+        - "&6&lGesamtausgaben"
+        - "&7Top 10 nach Ausgaben"
+        - "%selected_top%"
+    wins:
+      display-name: "Am häufigsten gewonnen"
+      lines:
+        - "&6&lAm häufigsten gewonnen"
+        - "&7Top 10 nach Gewinnen"
+        - "%selected_top%"
+    highest_win:
+      display-name: "Höchster Gewinn"
+      lines:
+        - "&6&lHöchster Gewinn"
+        - "&7Top 10 nach Einzelgewinn"
+        - "%selected_top%"
+    total_won:
+      display-name: "Gesammt gewonnen"
+      lines:
+        - "&6&lGesammt gewonnen"
+        - "&7Top 10 nach Gesamtgewinn"
+        - "%selected_top%"
+    current_tickets:
+      display-name: "Aktuelle Tickets"
+      lines:
+        - "&6&lAktuelle Tickets"
+        - "&7Top 10 der aktuellen Runde"
+        - "%selected_top%"
+    default:
+      display-name: "Lotterie Statistik"
+      lines:
+        - "&6&lLotterie Statistik"
+        - "&7Statistik: &e%statistic%"
+        - "%selected_top%"
+
+holograms: {}

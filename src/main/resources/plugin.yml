@@ -1,0 +1,22 @@
+name: CraftplayLotterie
+version: 1.0.0
+main: dev.codex.lottery.LotteryPlugin
+api-version: "1.21"
+depend: [Vault]
+softdepend: [PlaceholderAPI, CMI, Jobs, Quests, BeautyQuests, BetonQuest, PlayerHeads, HeadDatabase]
+authors: [Codex]
+description: Craftplay Lotterie with GUI, PlaceholderAPI and webhook support.
+
+commands:
+  lottery:
+    description: Main command for the lottery plugin
+    usage: /lottery [help|buy|gui|jackpot|winners|stats|nextdraw|draw|simulate|reload|setjackpot|addjackpot|reset|info|admin|notifications|payments|backup|export|import|debug|doctor|log|setup|season]
+    aliases: [lot]
+
+permissions:
+  lottery.use:
+    description: Allows using player lottery commands
+    default: true
+  lottery.admin:
+    description: Allows admin lottery actions
+    default: op

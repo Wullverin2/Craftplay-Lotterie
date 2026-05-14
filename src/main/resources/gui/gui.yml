@@ -1,0 +1,406 @@
+gui:
+  enabled: true
+  title: "&6&lCraftplay Lotterie"
+  size: 36
+  filler-material: "BLACK_STAINED_GLASS_PANE"
+  items:
+    top-decoration:
+      slots: ["0-8", 27, 28, 29, 30, 32, 33]
+      material: "YELLOW_STAINED_GLASS_PANE"
+      name: "&6"
+      lore: []
+    buy-small:
+      slot: 10
+      material: "GOLD_NUGGET"
+      buy-amount: 1
+      refresh-after-click: true
+      name: "&e%buy_amount% Ticket kaufen"
+      lore:
+        - "&7Preis: &f%buy_price%"
+        - "&7Gekaufte Tickets: &f%tickets_total%"
+        - "&7Topf: &f%pot%"
+        - "&aKlicken zum Kaufen"
+      actions:
+        - "buy:%buy_amount%"
+    buy-medium:
+      slot: 11
+      material: "GOLD_INGOT"
+      buy-amount: 5
+      refresh-after-click: true
+      name: "&e%buy_amount% Tickets kaufen"
+      lore:
+        - "&7Preis: &f%buy_price%"
+        - "&7Gekaufte Tickets: &f%tickets_total%"
+        - "&7Topf: &f%pot%"
+        - "&aKlicken zum Kaufen"
+      actions:
+        - "buy:%buy_amount%"
+    pot-info:
+      slot: 13
+      material: "CHEST"
+      name: "&6Aktueller Topf"
+      lore:
+        - "&7Topf gesamt: &f%pot%"
+        - "&7Ticket-Einsätze: &f%ticket_pot%"
+        - "&7Zusatzbetrag: &f%base_pot%"
+        - "&7Gekaufte Tickets: &f%tickets_total%"
+        - "&7Teilnehmer: &f%players%/%min_players%"
+        - "&7Nächste Ziehung: &f%next_draw%"
+      actions: []
+    buy-large:
+      slot: 15
+      material: "GOLD_BLOCK"
+      buy-amount: 10
+      refresh-after-click: true
+      name: "&e%buy_amount% Tickets kaufen"
+      lore:
+        - "&7Preis: &f%buy_price%"
+        - "&7Gekaufte Tickets: &f%tickets_total%"
+        - "&7Topf: &f%pot%"
+        - "&aKlicken zum Kaufen"
+      actions:
+        - "buy:%buy_amount%"
+    buy-very-large:
+      slot: 16
+      material: "EMERALD"
+      buy-amount: 25
+      refresh-after-click: true
+      name: "&e%buy_amount% Tickets kaufen"
+      lore:
+        - "&7Preis: &f%buy_price%"
+        - "&7Gekaufte Tickets: &f%tickets_total%"
+        - "&7Topf: &f%pot%"
+        - "&aKlicken zum Kaufen"
+      actions:
+        - "buy:%buy_amount%"
+    player-head:
+      slot: 22
+      material: "PLAYER_HEAD"
+      skull-owner: "%player_name%"
+      name: "&f%player_name%"
+      lore:
+        - "&7Deine Tickets: &f%tickets%"
+        - "&7Deine Chance: &f%chance%"
+        - "&7CMI Balance: &f%cmi_user_balance_formatted%"
+        - "&7Jobs Level: &f%jobsr_user_totallevels%"
+        - "&7Quest Fortschritt: &f%quests_player_current_quest_names%"
+      actions: []
+    personal-statistics:
+      slot: 30
+      material: "PLAYER_HEAD"
+      skull-owner: "%player_name%"
+      name: "&bDeine Statistik"
+      lore:
+        - "&7Tickets gesamt: &f%player_stats_tickets_bought%"
+        - "&7Ausgaben: &f%player_stats_money_spent%"
+        - "&7Gewinne: &f%player_stats_wins%"
+        - "&aKlicken zum Oeffnen"
+      actions:
+        - "open-personal-stats"
+    statistics:
+      slot: 31
+      material: "BOOK"
+      name: "&6Statistik"
+      lore:
+        - "&7Top 10 Listen ansehen"
+        - "&7für Tickets, Ausgaben,"
+        - "&7Gewinne und Runden."
+        - "&aKlicken zum Öffnen"
+      actions:
+        - "open-stats"
+    language:
+      slot: 32
+      material: "WRITABLE_BOOK"
+      name: "&bSprache"
+      lore:
+        - "&7Aktuelle Sprache wechseln."
+        - "&aKlicken zum Öffnen"
+      actions:
+        - "open-language"
+    admin:
+      slot: 34
+      material: "COMMAND_BLOCK"
+      name: "&cAdmin"
+      lore:
+        - "&7Admin-Uebersicht oeffnen."
+        - "&aKlicken zum Oeffnen"
+      actions:
+        - "open-admin"
+    close:
+      slot: 35
+      material: "BARRIER"
+      name: "&cSchließen"
+      lore:
+        - "&7Klicke, um das Menü zu schließen."
+      actions:
+        - "close"
+
+stats-gui:
+  enabled: true
+  title: "&6&lLotterie Statistik"
+  size: 54
+  filler-material: "GRAY_STAINED_GLASS_PANE"
+  items:
+    decoration:
+      slots: ["0-8", "45-53"]
+      material: "YELLOW_STAINED_GLASS_PANE"
+      name: "&6"
+      lore: []
+    most-played:
+      slot: 10
+      material: "CLOCK"
+      name: "&eAm meisten mitgespielt"
+      lore:
+        - "%top_rounds_played%"
+      actions: []
+    most-tickets:
+      slot: 11
+      material: "PAPER"
+      name: "&eMeiste gekaufte Tickets"
+      lore:
+        - "%top_tickets_bought%"
+      actions: []
+    most-spent:
+      slot: 12
+      material: "EMERALD"
+      name: "&eGesamtausgaben"
+      lore:
+        - "%top_money_spent%"
+      actions: []
+    most-wins:
+      slot: 14
+      material: "NETHER_STAR"
+      name: "&eAm häufigsten gewonnen"
+      lore:
+        - "%top_wins%"
+      actions: []
+    highest-win:
+      slot: 15
+      material: "GOLD_BLOCK"
+      name: "&eHöchster Einzelgewinn"
+      lore:
+        - "%top_highest_win%"
+      actions: []
+    total-won:
+      slot: 16
+      material: "CHEST"
+      name: "&eAlle Gewinne zusammen"
+      lore:
+        - "%top_total_won%"
+      actions: []
+    current-tickets:
+      slot: 22
+      material: "NAME_TAG"
+      name: "&eAktuelle Runde"
+      lore:
+        - "%top_current_tickets%"
+      actions: []
+    back:
+      slot: 49
+      material: "ARROW"
+      name: "&aZurück"
+      lore:
+        - "&7Zurück zur Lotterie."
+      actions:
+        - "open-main"
+
+personal-stats-gui:
+  enabled: true
+  title: "&6&lDeine Lotterie Statistik"
+  size: 36
+  filler-material: "BLUE_STAINED_GLASS_PANE"
+  items:
+    decoration:
+      slots: ["0-8", "27-35"]
+      material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+      name: "&b"
+      lore: []
+    overview:
+      slot: 13
+      material: "PLAYER_HEAD"
+      skull-owner: "%player_name%"
+      name: "&e%player_name%"
+      lore:
+        - "&7Aktuelle Tickets: &f%player_tickets%"
+        - "&7Aktuelle Chance: &f%player_chance%"
+        - "&7Runden gespielt: &f%player_stats_rounds_played%"
+        - "&7Tickets gesamt: &f%player_stats_tickets_bought%"
+        - "&7Ausgaben gesamt: &f%player_stats_money_spent%"
+        - "&7Gewinne: &f%player_stats_wins%"
+        - "&7Hoechster Gewinn: &f%player_stats_highest_win%"
+        - "&7Gesamt gewonnen: &f%player_stats_total_won%"
+        - "&7Bilanz: &f%player_stats_profit%"
+        - "&7Letzter Kauf: &f%player_stats_last_purchase%"
+        - "&7Letzter Gewinn: &f%player_stats_last_win%"
+      actions: []
+    buy:
+      slot: 21
+      material: "GOLD_INGOT"
+      buy-amount: 1
+      name: "&aWeiteres Ticket kaufen"
+      lore:
+        - "&7Preis: &f%buy_price%"
+        - "&aKlicken zum Kaufen"
+      actions:
+        - "buy:%buy_amount%"
+    back:
+      slot: 31
+      material: "ARROW"
+      name: "&aZurueck"
+      lore:
+        - "&7Zurueck zur Lotterie."
+      actions:
+        - "open-main"
+    close:
+      slot: 35
+      material: "BARRIER"
+      name: "&cSchliessen"
+      lore:
+        - "&7Menue schliessen."
+      actions:
+        - "close"
+
+language-gui:
+  enabled: true
+  title: "&6&lSprache"
+  size: 27
+  filler-material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+  items:
+    german:
+      slot: 11
+      material: "LIME_DYE"
+      name: "&aDeutsch"
+      lore:
+        - "&7Stellt deine Sprache auf Deutsch."
+      actions:
+        - "language:de"
+    english:
+      slot: 15
+      material: "BLUE_DYE"
+      name: "&bEnglish"
+      lore:
+        - "&7Sets your language to English."
+      actions:
+        - "language:en"
+    back:
+      slot: 22
+      material: "ARROW"
+      name: "&aZurück"
+      lore:
+        - "&7Zurück zur Lotterie."
+      actions:
+        - "open-main"
+
+admin-gui:
+  enabled: true
+  title: "&c&lLotterie Admin"
+  size: 36
+  filler-material: "RED_STAINED_GLASS_PANE"
+  items:
+    status:
+      slot: 10
+      material: "CHEST"
+      name: "&6Aktuelle Runde"
+      lore:
+        - "&7Topf: &f%pot%"
+        - "&7Tickets: &f%tickets_total%"
+        - "&7Spieler: &f%players%/%min_players%"
+        - "&7Naechste Ziehung: &f%next_draw%"
+        - "&7Offene Nachrichten: &f%pending_notifications%"
+      actions: []
+    force-draw:
+      slot: 12
+      material: "NETHER_STAR"
+      name: "&eZiehung erzwingen"
+      lore:
+        - "&7Startet sofort eine Ziehung."
+      actions:
+        - "force-draw"
+    simulate:
+      slot: 11
+      material: "ENDER_EYE"
+      name: "&bTestziehung"
+      lore:
+        - "&7Simuliert eine Ziehung ohne Auszahlung."
+      actions:
+        - "player:/lottery simulate"
+    notifications:
+      slot: 14
+      material: "PAPER"
+      name: "&eOffline-Nachrichten"
+      lore:
+        - "&7Listet offene Nachrichten im Chat."
+      actions:
+        - "player:/lottery notifications list"
+    log:
+      slot: 15
+      material: "BOOK"
+      name: "&eAdmin-Log"
+      lore:
+        - "&7Zeigt die letzten Aktionen im Chat."
+      actions:
+        - "player:/lottery log 1"
+    reload:
+      slot: 16
+      material: "REDSTONE"
+      name: "&aReload"
+      lore:
+        - "&7Laedt Konfigurationen neu."
+      actions:
+        - "reload-plugin"
+    reset:
+      slot: 22
+      material: "TNT"
+      name: "&cRunde zuruecksetzen"
+      lore:
+        - "&7Setzt Tickets und Topf zurueck."
+      actions:
+        - "reset-round"
+    debug:
+      slot: 23
+      material: "COMPASS"
+      name: "&bDebug"
+      lore:
+        - "&7Zeigt Plugin-Status im Chat."
+      actions:
+        - "player:/lottery debug"
+    doctor:
+      slot: 20
+      material: "SPYGLASS"
+      name: "&aDoctor"
+      lore:
+        - "&7Prueft Config, Hooks und Storage."
+      actions:
+        - "player:/lottery doctor"
+    backup:
+      slot: 24
+      material: "ENDER_CHEST"
+      name: "&aBackup"
+      lore:
+        - "&7Erstellt ein ZIP-Backup."
+      actions:
+        - "player:/lottery backup"
+    season-reset:
+      slot: 25
+      material: "SUNFLOWER"
+      name: "&eSaison zuruecksetzen"
+      lore:
+        - "&7Setzt die aktuelle Saisonstatistik zurueck."
+      actions:
+        - "player:/lottery season reset"
+    back:
+      slot: 31
+      material: "ARROW"
+      name: "&aZurueck"
+      lore:
+        - "&7Zurueck zur Lotterie."
+      actions:
+        - "open-main"
+    close:
+      slot: 35
+      material: "BARRIER"
+      name: "&cSchliessen"
+      lore:
+        - "&7Menue schliessen."
+      actions:
+        - "close"
