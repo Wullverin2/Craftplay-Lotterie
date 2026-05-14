@@ -94,7 +94,7 @@ gui:
         - "&7Tickets gesamt: &f%player_stats_tickets_bought%"
         - "&7Ausgaben: &f%player_stats_money_spent%"
         - "&7Gewinne: &f%player_stats_wins%"
-        - "&aKlicken zum Oeffnen"
+        - "&aKlicken zum Öffnen"
       actions:
         - "open-personal-stats"
     statistics:
@@ -122,8 +122,8 @@ gui:
       material: "COMMAND_BLOCK"
       name: "&cAdmin"
       lore:
-        - "&7Admin-Uebersicht oeffnen."
-        - "&aKlicken zum Oeffnen"
+        - "&7Admin-Übersicht öffnen."
+        - "&aKlicken zum Öffnen"
       actions:
         - "open-admin"
     close:
@@ -227,7 +227,7 @@ personal-stats-gui:
         - "&7Tickets gesamt: &f%player_stats_tickets_bought%"
         - "&7Ausgaben gesamt: &f%player_stats_money_spent%"
         - "&7Gewinne: &f%player_stats_wins%"
-        - "&7Hoechster Gewinn: &f%player_stats_highest_win%"
+        - "&7Höchster Gewinn: &f%player_stats_highest_win%"
         - "&7Gesamt gewonnen: &f%player_stats_total_won%"
         - "&7Bilanz: &f%player_stats_profit%"
         - "&7Letzter Kauf: &f%player_stats_last_purchase%"
@@ -246,17 +246,17 @@ personal-stats-gui:
     back:
       slot: 31
       material: "ARROW"
-      name: "&aZurueck"
+      name: "&aZurück"
       lore:
-        - "&7Zurueck zur Lotterie."
+        - "&7Zurück zur Lotterie."
       actions:
         - "open-main"
     close:
       slot: 35
       material: "BARRIER"
-      name: "&cSchliessen"
+      name: "&cSchließen"
       lore:
-        - "&7Menue schliessen."
+        - "&7Menü schließen."
       actions:
         - "close"
 
@@ -305,7 +305,7 @@ admin-gui:
         - "&7Topf: &f%pot%"
         - "&7Tickets: &f%tickets_total%"
         - "&7Spieler: &f%players%/%min_players%"
-        - "&7Naechste Ziehung: &f%next_draw%"
+        - "&7Nächste Ziehung: &f%next_draw%"
         - "&7Offene Nachrichten: &f%pending_notifications%"
       actions: []
     force-draw:
@@ -345,15 +345,15 @@ admin-gui:
       material: "REDSTONE"
       name: "&aReload"
       lore:
-        - "&7Laedt Konfigurationen neu."
+        - "&7Lädt Konfigurationen neu."
       actions:
         - "reload-plugin"
     reset:
       slot: 22
       material: "TNT"
-      name: "&cRunde zuruecksetzen"
+      name: "&cRunde zurücksetzen"
       lore:
-        - "&7Setzt Tickets und Topf zurueck."
+        - "&7Setzt Tickets und Topf zurück."
       actions:
         - "reset-round"
     debug:
@@ -369,7 +369,7 @@ admin-gui:
       material: "SPYGLASS"
       name: "&aDoctor"
       lore:
-        - "&7Prueft Config, Hooks und Storage."
+        - "&7Prüft Config, Hooks und Storage."
       actions:
         - "player:/lottery doctor"
     backup:
@@ -383,24 +383,24 @@ admin-gui:
     season-reset:
       slot: 25
       material: "SUNFLOWER"
-      name: "&eSaison zuruecksetzen"
+      name: "&eSaison zurücksetzen"
       lore:
-        - "&7Setzt die aktuelle Saisonstatistik zurueck."
+        - "&7Setzt die aktuelle Saisonstatistik zurück."
       actions:
         - "player:/lottery season reset"
     back:
       slot: 31
       material: "ARROW"
-      name: "&aZurueck"
+      name: "&aZurück"
       lore:
-        - "&7Zurueck zur Lotterie."
+        - "&7Zurück zur Lotterie."
       actions:
         - "open-main"
     close:
       slot: 35
       material: "BARRIER"
-      name: "&cSchliessen"
+      name: "&cSchließen"
       lore:
-        - "&7Menue schliessen."
+        - "&7Menü schließen."
       actions:
         - "close"

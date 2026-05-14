@@ -445,7 +445,7 @@ public final class LotteryManager {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.doctor-header");
         doctorLine(sender, "Vault", Bukkit.getPluginManager().isPluginEnabled("Vault"), "Vault Economy Provider");
         doctorLine(sender, "Ticketpreis", getTicketPrice() > 0.0D, economyService.format(getTicketPrice()));
-        doctorLine(sender, "GUI Groesse", plugin.getGuiConfig().getInt("gui.size", 27) % 9 == 0, String.valueOf(plugin.getGuiConfig().getInt("gui.size", 27)));
+        doctorLine(sender, "GUI Größe", plugin.getGuiConfig().getInt("gui.size", 27) % 9 == 0, String.valueOf(plugin.getGuiConfig().getInt("gui.size", 27)));
         doctorLine(sender, "Mindestspieler", getMinimumPlayers() >= 0, String.valueOf(getMinimumPlayers()));
         doctorLine(sender, "Storage", !databaseStorage.getStatus().startsWith("unknown") && !databaseStorage.getStatus().contains("failed"), databaseStorage.getStatus());
         doctorLine(sender, "Gewinnanteile", getPrizeShares().stream().mapToDouble(Double::doubleValue).sum() > 0.0D, getPrizeShares().toString());
@@ -1815,7 +1815,7 @@ public final class LotteryManager {
                 + "{\"name\":\"Gewinner\",\"value\":\"" + escapeJson(winnerName) + "\",\"inline\":true},"
                 + "{\"name\":\"Gewinn\",\"value\":\"" + escapeJson(economyService.format(amount)) + "\",\"inline\":true},"
                 + "{\"name\":\"Tickets\",\"value\":\"" + winnerTickets + "\",\"inline\":true},"
-                + "{\"name\":\"Naechste Ziehung\",\"value\":\"" + escapeJson(formatNextDraw()) + "\",\"inline\":false}"
+                + "{\"name\":\"Nächste Ziehung\",\"value\":\"" + escapeJson(formatNextDraw()) + "\",\"inline\":false}"
                 + "]}]}";
         } else {
             payload = "{\"username\":\"" + escapeJson(username) + "\",\"content\":\"" + escapeJson(content) + "\"}";

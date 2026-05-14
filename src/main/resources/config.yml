@@ -95,7 +95,7 @@ rewards:
   commands-on-win: []
   # Beispiel:
   # commands-on-win:
-  #   - "broadcast %player% hat zusaetzlich einen Bonus gewonnen!"
+  #   - "broadcast %player% hat zusätzlich einen Bonus gewonnen!"
   packages:
     enabled: false
     items:
@@ -126,7 +126,7 @@ webhook:
   enabled: false
   url: ""
   username: "Lottery"
-  message: "**Lottery:** %player% hat %amount% mit %tickets% Ticket(s) gewonnen. Naechste Ziehung: %next_draw%"
+  message: "**Lottery:** %player% hat %amount% mit %tickets% Ticket(s) gewonnen. Nächste Ziehung: %next_draw%"
   embed:
     enabled: true
     title: "Craftplay Lotterie Gewinner"
@@ -135,10 +135,10 @@ webhook:
   events:
     ticket-purchase:
       enabled: false
-      message: "**Ticketkauf:** %player% hat %amount% Ticket(s) fuer %cost% gekauft. Topf: %pot%"
+      message: "**Ticketkauf:** %player% hat %amount% Ticket(s) für %cost% gekauft. Topf: %pot%"
     draw-not-enough-players:
       enabled: false
-      message: "**Lotterie:** Zu wenige Spieler. Rueckerstattung: %refunded% an %refunded_players% Spieler."
+      message: "**Lotterie:** Zu wenige Spieler. Rückerstattung: %refunded% an %refunded_players% Spieler."
     draw-no-players:
       enabled: false
       message: "**Lotterie:** Keine Tickets vorhanden, Ziehung ohne Gewinner beendet."
