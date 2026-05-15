@@ -1,0 +1,151 @@
+name: Build and publish release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build JAR and publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Read project version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(mvn -B -q -DforceStdout -Dstyle.color=never help:evaluate -Dexpression=project.version)"
+          VERSION="$(printf '%s' "$VERSION" | sed -E 's/\x1B\[[0-9;]*[mK]//g' | tr -d '\r\n')"
+          PLUGIN_VERSION="$(awk '/^version:/ { gsub(/"/, "", $2); print $2; exit }' src/main/resources/plugin.yml)"
+
+          if [ -z "$VERSION" ]; then
+            echo "Could not read project.version from pom.xml." >&2
+            exit 1
+          fi
+
+          if [ "$VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "pom.xml version ($VERSION) and plugin.yml version ($PLUGIN_VERSION) must match before releasing." >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build plugin
+        run: mvn -B clean package
+
+      - name: Prepare release JAR
+        id: files
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SOURCE_JAR="target/craftplay-lotterie-${VERSION}.jar"
+          RELEASE_JAR="target/Craftplay-Lotterie-${VERSION}.jar"
+
+          if [ ! -f "$SOURCE_JAR" ]; then
+            SOURCE_JAR="$(find target -maxdepth 1 -type f -name 'craftplay-lotterie-*.jar' ! -name 'original-*' | head -n 1)"
+          fi
+
+          if [ -z "$SOURCE_JAR" ] || [ ! -f "$SOURCE_JAR" ]; then
+            echo "No built plugin JAR found in target/." >&2
+            exit 1
+          fi
+
+          cp "$SOURCE_JAR" "$RELEASE_JAR"
+          echo "jar=$RELEASE_JAR" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          NOTES_FILE="target/Craftplay-Lotterie-${VERSION}-CHANGELOG.md"
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            RANGE="$TAG..HEAD"
+            HEADING="Aenderungen seit dem letzten $TAG Release"
+          else
+            PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)"
+            if [ -n "$PREVIOUS_TAG" ]; then
+              RANGE="$PREVIOUS_TAG..HEAD"
+              HEADING="Aenderungen seit $PREVIOUS_TAG"
+            else
+              RANGE="HEAD"
+              HEADING="Letzte Aenderungen"
+            fi
+          fi
+
+          if [ "$RANGE" = "HEAD" ]; then
+            CHANGES="$(git log --pretty=format:'- %s (`%h`)' -n 20)"
+          else
+            CHANGES="$(git log --pretty=format:'- %s (`%h`)' "$RANGE")"
+          fi
+
+          if [ -z "$CHANGES" ]; then
+            CHANGES="- Keine neuen Commit-Eintraege gefunden."
+          fi
+
+          {
+            echo "## Craftplay Lotterie $TAG"
+            echo
+            echo "Build: \`${GITHUB_SHA::7}\`"
+            echo
+            echo "### $HEADING"
+            echo
+            echo "$CHANGES"
+            echo
+            echo "### Download"
+            echo
+            echo "- \`Craftplay-Lotterie-${VERSION}.jar\`"
+          } > "$NOTES_FILE"
+
+          echo "notes=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Move release tag to this commit
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$TAG"
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          JAR: ${{ steps.files.outputs.jar }}
+          NOTES: ${{ steps.changelog.outputs.notes }}
+        run: |
+          TITLE="Craftplay Lotterie $TAG"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file "$NOTES" --latest
+            gh release upload "$TAG" "$JAR" "$NOTES" --clobber
+          else
+            gh release create "$TAG" "$JAR" "$NOTES" --title "$TITLE" --notes-file "$NOTES" --latest --verify-tag
+          fi

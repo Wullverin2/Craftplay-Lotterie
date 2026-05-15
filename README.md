@@ -29,6 +29,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Animiertes Ziehungs-GUI und Gewinnerwand
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
 - GitHub-Release-Updatechecker mit Startprüfung, Admin-Join-Hinweis und manuellem `/lottery updatecheck`
+- Automatische GitHub Releases bei Push auf `main`, inklusive fertiger JAR und Changelog
 - Sprachdateien für Deutsch und Englisch im Ordner `lang`
 - Referenzdateien mit Kommentaren werden beim Start unter `reference/` abgelegt
 
@@ -120,6 +121,12 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 ## Update-Checker
 
 Der Update-Checker fragt standardmäßig den neuesten GitHub Release von `https://api.github.com/repos/Wullverin2/Craftplay-Lotterie/releases/latest` ab. Die Quelle, Cache-Zeit, Startprüfung und Admin-Join-Benachrichtigung können in `config.yml` unter `update-checker` angepasst oder vollständig deaktiviert werden.
+
+## GitHub Releases
+
+Bei jedem Push auf `main` baut GitHub Actions automatisch die aktuelle JAR und veröffentlicht oder aktualisiert den Release zur Versionsnummer aus `pom.xml` und `plugin.yml`, zum Beispiel `v1.0.0`. Der Release enthält die Datei `Craftplay-Lotterie-<version>.jar` und ein Changelog als Release-Text sowie als Markdown-Datei.
+
+Für eine neue öffentliche Version müssen `pom.xml` und `src/main/resources/plugin.yml` dieselbe neue Versionsnummer enthalten. Wenn dieselbe Versionsnummer erneut gepusht wird, wird der bestehende Release dieser Version aktualisiert.
 
 ## PlaceholderAPI
 
