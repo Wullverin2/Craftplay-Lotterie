@@ -13,7 +13,11 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -27,7 +31,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 5;
+    private static final int CONFIG_VERSION = 6;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -38,6 +42,7 @@ public final class LotteryPlugin extends JavaPlugin {
     private File playerLanguagesFile;
     private File hologramsFile;
     private File lotteriesFile;
+    private File lastConfigUpdateReportFile;
     private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
 
     @Override
@@ -251,6 +256,13 @@ public final class LotteryPlugin extends JavaPlugin {
             - `%lottery_player_stats_total_won%`
             - `%lottery_player_stats_rounds_played%`
             - `%lottery_player_stats_profit%`
+            - `%lottery_my_rank_tickets_bought%`
+            - `%lottery_my_rank_money_spent%`
+            - `%lottery_my_rank_wins%`
+            - `%lottery_my_rank_highest_win%`
+            - `%lottery_my_rank_total_won%`
+            - `%lottery_my_rank_rounds_played%`
+            - `%lottery_my_rank_current_tickets%`
             - `%lottery_season_points%`
 
             ## Saison
@@ -305,19 +317,25 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public int updateConfigDefaults() {
         int updatedFiles = 0;
-        updatedFiles += updateConfigDefaults("config.yml", new File(getDataFolder(), "config.yml")) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml")) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("holograms.yml", hologramsFile) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lotteries.yml", lotteriesFile) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lang/de.yml", new File(getDataFolder(), "lang/de.yml")) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lang/en.yml", new File(getDataFolder(), "lang/en.yml")) ? 1 : 0;
+        List<String> changedFiles = new ArrayList<>();
+        updatedFiles += updateConfigDefaults("config.yml", new File(getDataFolder(), "config.yml"), changedFiles) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml"), changedFiles) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("holograms.yml", hologramsFile, changedFiles) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lotteries.yml", lotteriesFile, changedFiles) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lang/de.yml", new File(getDataFolder(), "lang/de.yml"), changedFiles) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lang/en.yml", new File(getDataFolder(), "lang/en.yml"), changedFiles) ? 1 : 0;
+        writeConfigUpdateReport(changedFiles);
         reloadConfig();
         loadCustomConfigs();
         writeDefaultReferenceFiles();
         return updatedFiles;
     }
 
-    private boolean updateConfigDefaults(String resourcePath, File file) {
+    public File getLastConfigUpdateReportFile() {
+        return lastConfigUpdateReportFile;
+    }
+
+    private boolean updateConfigDefaults(String resourcePath, File file, List<String> changedFiles) {
         try (InputStream inputStream = getResource(resourcePath)) {
             if (inputStream == null) {
                 return false;
@@ -340,12 +358,32 @@ public final class LotteryPlugin extends JavaPlugin {
                     Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 }
                 config.save(file);
+                changedFiles.add(resourcePath);
                 return true;
             }
         } catch (IOException exception) {
             getLogger().warning("Could not update defaults for " + resourcePath + ": " + exception.getMessage());
         }
         return false;
+    }
+
+    private void writeConfigUpdateReport(List<String> changedFiles) {
+        File reportFolder = new File(getDataFolder(), "migrations");
+        if (!reportFolder.exists() && !reportFolder.mkdirs()) {
+            getLogger().warning("Could not create migrations folder for config update report.");
+            return;
+        }
+
+        lastConfigUpdateReportFile = new File(reportFolder, "config-update-"
+            + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".txt");
+        String content = changedFiles.isEmpty()
+            ? "No config defaults were missing.\n"
+            : "Updated config defaults:\n- " + String.join("\n- ", changedFiles) + "\n";
+        try {
+            Files.writeString(lastConfigUpdateReportFile.toPath(), content, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            getLogger().warning("Could not write config update report: " + exception.getMessage());
+        }
     }
 
     private void loadCustomConfigs() {

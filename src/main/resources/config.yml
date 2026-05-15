@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 5
+config-version: 6
 
 settings:
   # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.
@@ -212,6 +212,25 @@ security:
   # DE: Ab diesem Kaufpreis erhalten Admins eine Warnung. 0 deaktiviert diese Warnung.
   # EN: Admins are warned from this purchase cost. 0 disables this warning.
   admin-warning-spend-threshold: 0.0
+  anti-abuse:
+    # DE: Aktiviert eine zusätzliche Kaufspitzen-Warnung für auffällige Ticketkäufe in kurzer Zeit.
+    # EN: Enables an additional burst-purchase warning for suspicious ticket purchases in a short window.
+    enabled: false
+    # DE: Zeitfenster in Sekunden, in dem Käufe zusammengerechnet werden.
+    # EN: Time window in seconds in which purchases are accumulated.
+    window-seconds: 60
+    # DE: Ab dieser Ticketanzahl im Zeitfenster werden Admins gewarnt. 0 deaktiviert die Ticketprüfung.
+    # EN: Admins are warned from this ticket amount in the window. 0 disables the ticket check.
+    tickets-threshold: 100
+    # DE: Ab diesem Ausgabebetrag im Zeitfenster werden Admins gewarnt. 0 deaktiviert die Geldprüfung.
+    # EN: Admins are warned from this spending amount in the window. 0 disables the money check.
+    spend-threshold: 0.0
+    # DE: Sendet die Warnung direkt an online Admins.
+    # EN: Sends the warning directly to online admins.
+    notify-admins: true
+    # DE: Schreibt optional IP-Adressen ins Admin-Log. Aus Datenschutzgründen standardmäßig aus.
+    # EN: Optionally writes IP addresses to the admin log. Disabled by default for privacy.
+    include-ip-in-log: false
 
 admin-safety:
   # DE: Erzwingt eine zweite Bestätigung für gefährliche Admin-Aktionen wie Reset, Force-Draw, Import und Profilwechsel.
@@ -469,6 +488,25 @@ draw-animation:
   # DE: Abstand zwischen Countdown-Schritten in Sekunden.
   # EN: Delay between countdown steps in seconds.
   step-seconds: 1
+  gui:
+    # DE: Öffnet während der Ziehung ein kleines animiertes Gewinner-GUI für online Spieler.
+    # EN: Opens a small animated winner GUI for online players during the draw.
+    enabled: false
+    # DE: Titel des Ziehungs-GUIs.
+    # EN: Title of the draw GUI.
+    title: "&6&lLotterie Ziehung"
+    # DE: Inventargröße des Ziehungs-GUIs.
+    # EN: Inventory size of the draw GUI.
+    size: 27
+    # DE: Slot, in dem Kandidaten und Gewinner angezeigt werden.
+    # EN: Slot where candidates and the winner are displayed.
+    winner-slot: 13
+    # DE: Anzahl der Namenswechsel vor dem Gewinner.
+    # EN: Number of name switches before the winner.
+    spins: 12
+    # DE: Abstand zwischen Namenswechseln in Ticks.
+    # EN: Delay between name switches in ticks.
+    interval-ticks: 4
 
 language:
   # DE: Standardsprache für Konsole und Spieler ohne eigene Auswahl.
@@ -498,6 +536,13 @@ notifications:
     # DE: Topf-Betrag, ab dem die Pot-Reminder-Nachricht gesendet wird.
     # EN: Pot amount from which the pot reminder message is sent.
     amount: 10000.0
+  ticket-holder-reminder:
+    # DE: Erinnert Spieler mit Tickets kurz vor der Ziehung nochmal persönlich.
+    # EN: Reminds ticket holders personally shortly before the draw.
+    enabled: true
+    # DE: Wie viele Minuten vor der Ziehung die Erinnerung gesendet wird.
+    # EN: How many minutes before the draw the reminder is sent.
+    minutes-before-draw: 10
   join-reminder:
     # DE: Sendet Spielern beim Join einen Lotterie-Hinweis.
     # EN: Sends players a lottery reminder when they join.

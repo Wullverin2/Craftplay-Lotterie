@@ -13,6 +13,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Getrennte Lotterie-Profile über `lotteries.yml` mit eigenen Runden, Töpfen, Historien und Ziehzeiten
 - Spieler können ihr persönliches Lotterie-Profil über `/lottery profile` wählen
 - Persönliche Reminder für Ziehung, Gewinn, Rückerstattung und Topf-Schwelle über `/lottery reminders`
+- Persönliche “Ziehung gleich”-Erinnerung für Spieler, die bereits Tickets besitzen
 - Lotterie-Typen `jackpot`, `fifty_fifty`, `fixed_prize` und optionale Item-Lotterie
 - Persistente Daten für Tickets, Ausgaben, Gewinne, Gewinnerhistorie, Saisonpunkte und Offline-Zahlungen
 - Statistik-GUI mit Top-10-Listen und letzten 10 Gewinnern
@@ -22,6 +23,10 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Admins können Spielern kostenlose Tickets für Events, Votes, Jobs oder Quests gewähren
 - Admin-GUI, Admin-Log, Transaktionslog mit Filter, CSV/YAML-Export, Import, Backup und Doctor
 - GUI-Editor und Config-Updater für fehlende Default-Keys
+- Setup-Wizard, Doctor-Fix, Audit-ZIP und einfache statische Web-Übersicht
+- Admin-Auswertungen für Tages-/Wochen-/Monatsumsatz, Auszahlungsquote und Steuern
+- Optionales Anti-Abuse-Monitoring für auffällige Kaufspitzen
+- Animiertes Ziehungs-GUI und Gewinnerwand
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
 - Sprachdateien für Deutsch und Englisch im Ordner `lang`
 - Referenzdateien mit Kommentaren werden beim Start unter `reference/` abgelegt
@@ -38,6 +43,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery profile [profil]`
 - `/lottery reminders`
 - `/lottery reminders <draw|win|refund|pot> <on|off>`
+- `/lottery winnerwall`
 - `/lottery jackpot`
 - `/lottery winners`
 - `/lottery stats`
@@ -55,15 +61,25 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery admin transactions`
 - `/lottery admin log`
 - `/lottery admin payments`
+- `/lottery admin stats`
+- `/lottery admin taxes`
 - `/lottery notifications list [spieler]`
 - `/lottery notifications clear <spieler|all>`
 - `/lottery payments retry`
 - `/lottery backup`
 - `/lottery export`
 - `/lottery export csv`
+- `/lottery export web`
+- `/lottery export audit`
+- `/lottery audit`
+- `/lottery web`
 - `/lottery import <datei>`
 - `/lottery debug`
 - `/lottery doctor`
+- `/lottery doctor fix`
+- `/lottery setupwizard`
+- `/lottery adminstats`
+- `/lottery taxreport`
 - `/lottery log [seite]`
 - `/lottery log player <name> [seite]`
 - `/lottery log action <aktion> [seite]`
@@ -116,6 +132,13 @@ Beispiele:
 - `%lottery_players%`
 - `%lottery_player_tickets%`
 - `%lottery_player_chance%`
+- `%lottery_my_rank_tickets_bought%`
+- `%lottery_my_rank_money_spent%`
+- `%lottery_my_rank_wins%`
+- `%lottery_my_rank_highest_win%`
+- `%lottery_my_rank_total_won%`
+- `%lottery_my_rank_rounds_played%`
+- `%lottery_my_rank_current_tickets%`
 - `%lottery_season_points%`
 - `%lottery_top_wins_1%`
 - `%lottery_top_wins_1_name%`
@@ -132,6 +155,7 @@ In `gui.yml` kann jedes Item eigene Aktionen haben:
 - `close`
 - `open-language`
 - `open-personal-stats`
+- `open-winner-wall`
 - `open-stats`
 - `open-admin`
 - `open-main`

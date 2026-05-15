@@ -84,6 +84,8 @@ public final class LotteryManager {
     private final Map<UUID, String> playerLotterySelections = new HashMap<>();
     private final Map<UUID, Map<String, Boolean>> notificationPreferences = new HashMap<>();
     private final Map<String, Boolean> potReminderSent = new HashMap<>();
+    private final Map<String, Boolean> ticketHolderReminderSent = new HashMap<>();
+    private final Map<UUID, PurchaseWindow> purchaseWindows = new HashMap<>();
     private final Map<UUID, Long> purchaseCooldowns = new HashMap<>();
     private final List<PendingPayment> pendingPayments = new ArrayList<>();
     private final Random random = new Random();
@@ -473,6 +475,155 @@ public final class LotteryManager {
         ));
     }
 
+    public void exportWebOverview(CommandSender sender) {
+        save();
+        File webFolder = new File(plugin.getDataFolder(), "web");
+        if (!webFolder.exists() && !webFolder.mkdirs()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-export-failed");
+            return;
+        }
+
+        File webFile = new File(webFolder, "index.html");
+        try {
+            Files.writeString(webFile.toPath(), buildWebOverviewHtml(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Could not export web overview: " + exception.getMessage());
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-export-failed");
+            return;
+        }
+
+        appendLog("web_export", Map.of("file", webFile.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-export-created", Map.of(
+            "file", webFile.getAbsolutePath()
+        ));
+    }
+
+    public void createAuditExport(CommandSender sender) {
+        save();
+        File auditFolder = new File(plugin.getDataFolder(), "audit");
+        if (!auditFolder.exists() && !auditFolder.mkdirs()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.audit-export-failed");
+            return;
+        }
+
+        String stamp = LocalDateTime.now(getZoneId()).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        File auditFile = new File(auditFolder, "lottery-audit-" + stamp + ".zip");
+        try (ZipOutputStream zipOutputStream = new ZipOutputStream(Files.newOutputStream(auditFile.toPath()))) {
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "config.yml"), "config.yml");
+            addFileToZip(zipOutputStream, dataFile, "data.yml");
+            addFileToZip(zipOutputStream, logFile, "admin-log.yml");
+            addFileToZip(zipOutputStream, transactionFile, "transactions.yml");
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "holograms.yml"), "holograms.yml");
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "lotteries.yml"), "lotteries.yml");
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "gui/gui.yml"), "gui/gui.yml");
+            File languageFolder = new File(plugin.getDataFolder(), "lang");
+            File[] languageFiles = languageFolder.listFiles((directory, name) -> name.endsWith(".yml"));
+            if (languageFiles != null) {
+                for (File languageFile : languageFiles) {
+                    addFileToZip(zipOutputStream, languageFile, "lang/" + languageFile.getName());
+                }
+            }
+            addStringToZip(zipOutputStream, "audit-report.txt", buildAuditReport());
+            addStringToZip(zipOutputStream, "web/index.html", buildWebOverviewHtml());
+            addStringToZip(zipOutputStream, "stats.csv", buildStatsCsv());
+            addStringToZip(zipOutputStream, "transactions.csv", buildTransactionsCsv());
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Could not create audit export: " + exception.getMessage());
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.audit-export-failed");
+            return;
+        }
+
+        appendLog("audit_export", Map.of("file", auditFile.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.audit-export-created", Map.of(
+            "file", auditFile.getAbsolutePath()
+        ));
+    }
+
+    private String buildWebOverviewHtml() {
+        Map<String, String> placeholders = createCommonPlaceholders(null);
+        StringBuilder winners = new StringBuilder();
+        for (WinnerEntry winner : winnerHistory().stream().limit(10).toList()) {
+            winners.append("<li><strong>").append(escapeHtml(winner.playerName())).append("</strong> - ")
+                .append(escapeHtml(economyService.format(winner.amount()))).append(" (")
+                .append(escapeHtml(winner.wonAt().format(WINNER_DATE_FORMAT))).append(")</li>");
+        }
+        if (winners.isEmpty()) {
+            winners.append("<li>Noch keine Gewinner.</li>");
+        }
+
+        StringBuilder topTickets = new StringBuilder();
+        for (TopEntry entry : getTopEntryList("tickets_bought")) {
+            topTickets.append("<li><strong>").append(escapeHtml(entry.name())).append("</strong> - ")
+                .append(escapeHtml(entry.value())).append("</li>");
+        }
+        if (topTickets.isEmpty()) {
+            topTickets.append("<li>Noch keine Daten.</li>");
+        }
+
+        return """
+            <!doctype html>
+            <html lang="de">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width,initial-scale=1">
+              <title>Craftplay Lotterie</title>
+              <style>
+                body{font-family:Arial,sans-serif;background:#101820;color:#f7f1e3;margin:0;padding:32px}
+                .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+                .card{background:#1d2b36;border:1px solid #315064;border-radius:16px;padding:18px}
+                h1,h2{color:#ffd166} strong{color:#8bd3dd}
+              </style>
+            </head>
+            <body>
+              <h1>Craftplay Lotterie</h1>
+              <div class="grid">
+                <div class="card"><h2>Topf</h2><p>%pot%</p></div>
+                <div class="card"><h2>Tickets</h2><p>%tickets_total%</p></div>
+                <div class="card"><h2>Spieler</h2><p>%players%/%min_players%</p></div>
+                <div class="card"><h2>Nächste Ziehung</h2><p>%next_draw%</p></div>
+              </div>
+              <div class="grid">
+                <div class="card"><h2>Letzte Gewinner</h2><ol>%winners%</ol></div>
+                <div class="card"><h2>Top Tickets</h2><ol>%top_tickets%</ol></div>
+              </div>
+            </body>
+            </html>
+            """
+            .replace("%pot%", escapeHtml(placeholders.getOrDefault("pot", "")))
+            .replace("%tickets_total%", escapeHtml(placeholders.getOrDefault("tickets_total", "0")))
+            .replace("%players%", escapeHtml(placeholders.getOrDefault("players", "0")))
+            .replace("%min_players%", escapeHtml(placeholders.getOrDefault("min_players", "0")))
+            .replace("%next_draw%", escapeHtml(placeholders.getOrDefault("next_draw", "")))
+            .replace("%winners%", winners.toString())
+            .replace("%top_tickets%", topTickets.toString());
+    }
+
+    private String buildAuditReport() {
+        AdminStatsSnapshot stats = collectAdminStats();
+        return "Craftplay Lotterie Audit\n"
+            + "Generated: " + LocalDateTime.now(getZoneId()).format(WINNER_DATE_FORMAT) + "\n"
+            + "Lottery: " + getActiveLotteryDisplayName() + " (" + getActiveLotteryId() + ")\n"
+            + "Pot: " + economyService.format(getTotalPot()) + "\n"
+            + "Tickets current round: " + currentRound().getTotalTickets() + "\n"
+            + "Players current round: " + currentRound().getUniquePlayers() + "\n"
+            + "Pending notifications: " + getPendingNotificationCount() + "\n"
+            + "Pending payments: " + pendingPayments.size() + "\n"
+            + "Transactions today: " + stats.purchasesToday() + "\n"
+            + "Revenue today: " + economyService.format(stats.ticketRevenueToday()) + "\n"
+            + "Revenue week: " + economyService.format(stats.ticketRevenueWeek()) + "\n"
+            + "Revenue month: " + economyService.format(stats.ticketRevenueMonth()) + "\n"
+            + "Payouts month: " + economyService.format(stats.payoutsMonth()) + "\n"
+            + "Taxes all time: " + economyService.format(stats.taxesAllTime()) + "\n";
+    }
+
+    private String escapeHtml(String input) {
+        return input == null ? "" : input
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;");
+    }
+
     private String buildStatsCsv() {
         StringBuilder builder = new StringBuilder("uuid,name,tickets_bought,money_spent,wins,highest_win,total_won,rounds_played,last_purchase_at,last_win_at,season_points\n");
         for (PlayerLotteryStats stats : playerStats.values().stream()
@@ -570,6 +721,104 @@ public final class LotteryManager {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Pending notifications", "value", String.valueOf(getPendingNotificationCount())));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Pending payments", "value", String.valueOf(pendingPayments.size())));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.debug-entry", Map.of("key", "Pending confirmations", "value", String.valueOf(pendingPurchases.size())));
+    }
+
+    public void showAdminStats(CommandSender sender) {
+        AdminStatsSnapshot stats = collectAdminStats();
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-header");
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Heute Umsatz", "value", economyService.format(stats.ticketRevenueToday())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Woche Umsatz", "value", economyService.format(stats.ticketRevenueWeek())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Monat Umsatz", "value", economyService.format(stats.ticketRevenueMonth())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Monat Auszahlungen", "value", economyService.format(stats.payoutsMonth())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Monat Rückerstattung", "value", economyService.format(stats.refundsMonth())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Auszahlungsquote Monat", "value", formatDecimal(stats.payoutRatioMonth() * 100.0D) + "%"));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Käufe heute", "value", String.valueOf(stats.purchasesToday())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Steuern gesamt", "value", economyService.format(stats.taxesAllTime())));
+    }
+
+    public void showTaxReport(CommandSender sender) {
+        AdminStatsSnapshot stats = collectAdminStats();
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.tax-report-header");
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Ticket-Steuer", "value", economyService.format(stats.ticketTaxesAllTime())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Gewinn-Steuer", "value", economyService.format(stats.payoutTaxesAllTime())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Steuern gesamt", "value", economyService.format(stats.taxesAllTime())));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Konfig Ticket-Steuer", "value", formatDecimal(getTaxRate() * 100.0D) + "%"));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-stats-line", Map.of("key", "Konfig Gewinn-Steuer", "value", formatDecimal(plugin.getConfig().getDouble("payout-tax.rate", 0.0D) * 100.0D) + "%"));
+    }
+
+    private AdminStatsSnapshot collectAdminStats() {
+        LocalDate today = LocalDate.now(getZoneId());
+        LocalDate weekStart = today.minusDays(today.getDayOfWeek().getValue() - 1L);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        double revenueToday = 0.0D;
+        double revenueWeek = 0.0D;
+        double revenueMonth = 0.0D;
+        double payoutsMonth = 0.0D;
+        double refundsMonth = 0.0D;
+        double ticketTaxes = 0.0D;
+        double payoutTaxes = 0.0D;
+        int purchasesToday = 0;
+
+        ConfigurationSection entriesSection = transactionConfig.getConfigurationSection("entries");
+        if (entriesSection != null) {
+            for (String key : entriesSection.getKeys(false)) {
+                String path = "entries." + key;
+                String type = transactionConfig.getString(path + ".type", "");
+                double amount = parseTransactionAmount(path);
+                LocalDate date = parseTransactionDate(transactionConfig.getString(path + ".time", "")).toLocalDate();
+
+                if ("ticket_purchase".equals(type)) {
+                    double revenue = Math.abs(amount);
+                    if (!date.isBefore(today)) {
+                        revenueToday += revenue;
+                        purchasesToday++;
+                    }
+                    if (!date.isBefore(weekStart)) {
+                        revenueWeek += revenue;
+                    }
+                    if (!date.isBefore(monthStart)) {
+                        revenueMonth += revenue;
+                    }
+                } else if ("winner_payout".equals(type) && !date.isBefore(monthStart)) {
+                    payoutsMonth += amount;
+                } else if ("refund".equals(type) && !date.isBefore(monthStart)) {
+                    refundsMonth += amount;
+                } else if ("ticket_tax".equals(type)) {
+                    ticketTaxes += amount;
+                } else if ("payout_tax".equals(type)) {
+                    payoutTaxes += amount;
+                }
+            }
+        }
+
+        double payoutRatio = revenueMonth <= 0.0D ? 0.0D : payoutsMonth / revenueMonth;
+        return new AdminStatsSnapshot(revenueToday, revenueWeek, revenueMonth, payoutsMonth, refundsMonth,
+            ticketTaxes, payoutTaxes, purchasesToday, payoutRatio);
+    }
+
+    private double parseTransactionAmount(String path) {
+        if (transactionConfig.isSet(path + ".raw-amount")) {
+            return transactionConfig.getDouble(path + ".raw-amount", 0.0D);
+        }
+
+        String amount = transactionConfig.getString(path + ".amount", "0");
+        String normalized = amount.replace(',', '.').replaceAll("[^0-9.\\-]", "");
+        if (normalized.isBlank() || normalized.equals("-")) {
+            return 0.0D;
+        }
+        try {
+            return Double.parseDouble(normalized);
+        } catch (NumberFormatException exception) {
+            return 0.0D;
+        }
+    }
+
+    private LocalDateTime parseTransactionDate(String value) {
+        try {
+            return LocalDateTime.parse(value);
+        } catch (RuntimeException exception) {
+            return LocalDateTime.now(getZoneId());
+        }
     }
 
     public void previewHolograms(CommandSender sender) {
@@ -915,6 +1164,72 @@ public final class LotteryManager {
         appendLog("doctor", Map.of("sender", sender.getName()));
     }
 
+    public void fixDoctorIssues(CommandSender sender) {
+        int fixed = plugin.updateConfigDefaults();
+        if (getTicketPrice() <= 0.0D) {
+            plugin.getConfig().set("settings.ticket-price", 1.0D);
+            fixed++;
+        }
+        if (getMinimumPlayers() < 1) {
+            plugin.getConfig().set("settings.minimum-players-to-draw", 1);
+            fixed++;
+        }
+        double taxRate = plugin.getConfig().getDouble("settings.tax-rate", 0.0D);
+        if (taxRate < 0.0D || taxRate > 1.0D) {
+            plugin.getConfig().set("settings.tax-rate", Math.max(0.0D, Math.min(1.0D, taxRate)));
+            fixed++;
+        }
+        int hour = plugin.getConfig().getInt("settings.draw-time.hour", 20);
+        int minute = plugin.getConfig().getInt("settings.draw-time.minute", 0);
+        if (hour < 0 || hour > 23) {
+            plugin.getConfig().set("settings.draw-time.hour", 20);
+            fixed++;
+        }
+        if (minute < 0 || minute > 59) {
+            plugin.getConfig().set("settings.draw-time.minute", 0);
+            fixed++;
+        }
+        if (getPrizeShares().isEmpty() || getPrizeShares().stream().mapToDouble(Double::doubleValue).sum() <= 0.0D) {
+            plugin.getConfig().set("winners.prize-shares", List.of(100.0D));
+            fixed++;
+        }
+
+        int guiSize = plugin.getGuiConfig().getInt("gui.size", 36);
+        if (guiSize < 9 || guiSize > 54 || guiSize % 9 != 0) {
+            plugin.getGuiConfig().set("gui.size", Math.max(9, Math.min(54, ((guiSize + 8) / 9) * 9)));
+            plugin.saveGuiConfig();
+            fixed++;
+        }
+
+        plugin.saveConfig();
+        plugin.reloadPlugin();
+        appendLog("doctor_fix", Map.of("fixed", String.valueOf(fixed), "sender", sender.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.doctor-fix-complete", Map.of(
+            "fixed", String.valueOf(fixed)
+        ));
+    }
+
+    public void showSetupWizard(CommandSender sender) {
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.setupwizard-header");
+        sendWizardLine(sender, "messages.setupwizard-price", "/lottery setup price " + formatDecimal(getTicketPrice()));
+        sendWizardLine(sender, "messages.setupwizard-minplayers", "/lottery setup minplayers " + getMinimumPlayers());
+        sendWizardLine(sender, "messages.setupwizard-drawtime", "/lottery setup drawtime " + TimeUtil.formatLocalTime(getDrawTime()));
+        sendWizardLine(sender, "messages.setupwizard-multipledraws", "/lottery setup multipledraws " + !plugin.getConfig().getBoolean("settings.draw-schedule.multiple-draws-enabled", false));
+        sendWizardLine(sender, "messages.setupwizard-type", "/lottery setup type " + getLotteryType());
+        sendWizardLine(sender, "messages.setupwizard-hologram", "/lottery hologram create lottery_countdown countdown");
+        sendWizardLine(sender, "messages.setupwizard-doctor", "/lottery doctor fix");
+    }
+
+    private void sendWizardLine(CommandSender sender, String messagePath, String command) {
+        if (sender instanceof Player player) {
+            player.sendMessage(legacy(MessageUtil.raw(player, plugin.getMessagesConfig(player), messagePath, Map.of(
+                "command", command
+            ))).clickEvent(ClickEvent.suggestCommand(command)));
+            return;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), messagePath, Map.of("command", command));
+    }
+
     private void doctorLine(CommandSender sender, String check, boolean ok, String detail) {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), ok ? "messages.doctor-ok" : "messages.doctor-warn", Map.of(
             "check", check,
@@ -1095,7 +1410,6 @@ public final class LotteryManager {
             "tickets", String.valueOf(amount),
             "lottery", getActiveLotteryId()
         ));
-        save();
 
         Map<String, String> placeholders = createCommonPlaceholders(player);
         placeholders.put("player", player.getName());
@@ -1106,11 +1420,13 @@ public final class LotteryManager {
         placeholders.put("stake_amount", String.valueOf(getItemLotteryStakeAmount() * amount));
         placeholders.put("stake_item", getItemLotteryStakeMaterial().name());
         notifyAdminsAboutLargePurchase(player, amount, fullCost, placeholders);
+        monitorAntiAbuse(player, amount, fullCost, placeholders);
         if (plugin.getConfig().getBoolean("settings.broadcast-ticket-purchases", true)) {
             broadcastConfigured("messages.ticket-purchase-broadcast", placeholders, player);
         }
         sendWebhookEvent("ticket-purchase", placeholders);
         maybeSendPotReminder(placeholders);
+        save();
         return new PurchaseResult(true, itemLottery ? "messages.buy-success-items" : "messages.buy-success", placeholders);
     }
 
@@ -1340,6 +1656,55 @@ public final class LotteryManager {
             "amount", String.valueOf(amount),
             "cost", economyService.format(fullCost)
         ));
+    }
+
+    private void monitorAntiAbuse(Player player, int amount, double fullCost, Map<String, String> placeholders) {
+        if (!plugin.getConfig().getBoolean("security.anti-abuse.enabled", false)) {
+            return;
+        }
+
+        long windowMillis = Math.max(10L, plugin.getConfig().getLong("security.anti-abuse.window-seconds", 60L)) * 1000L;
+        long now = System.currentTimeMillis();
+        PurchaseWindow window = purchaseWindows.computeIfAbsent(player.getUniqueId(), ignored -> new PurchaseWindow(now));
+        if (now - window.startedAtMillis > windowMillis) {
+            window.startedAtMillis = now;
+            window.tickets = 0;
+            window.spent = 0.0D;
+            window.warned = false;
+        }
+
+        window.tickets += amount;
+        window.spent += fullCost;
+        int ticketThreshold = plugin.getConfig().getInt("security.anti-abuse.tickets-threshold", 100);
+        double spendThreshold = plugin.getConfig().getDouble("security.anti-abuse.spend-threshold", 0.0D);
+        boolean overTickets = ticketThreshold > 0 && window.tickets >= ticketThreshold;
+        boolean overSpend = spendThreshold > 0.0D && window.spent >= spendThreshold;
+        if ((!overTickets && !overSpend) || window.warned) {
+            return;
+        }
+
+        window.warned = true;
+        Map<String, String> warningPlaceholders = new HashMap<>(placeholders);
+        warningPlaceholders.put("window_seconds", String.valueOf(windowMillis / 1000L));
+        warningPlaceholders.put("window_tickets", String.valueOf(window.tickets));
+        warningPlaceholders.put("window_spent", economyService.format(window.spent));
+        warningPlaceholders.put("player_uuid", player.getUniqueId().toString());
+        if (plugin.getConfig().getBoolean("security.anti-abuse.include-ip-in-log", false) && player.getAddress() != null) {
+            warningPlaceholders.put("player_ip", player.getAddress().getAddress().getHostAddress());
+        } else {
+            warningPlaceholders.put("player_ip", "hidden");
+        }
+
+        appendLog("anti_abuse_purchase", warningPlaceholders);
+        if (!plugin.getConfig().getBoolean("security.anti-abuse.notify-admins", true)) {
+            return;
+        }
+
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            if (onlinePlayer.hasPermission("lottery.admin")) {
+                MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.anti-abuse-warning", warningPlaceholders);
+            }
+        }
     }
 
     private void maybeSendPotReminder(Map<String, String> placeholders) {
@@ -1667,6 +2032,7 @@ public final class LotteryManager {
         placeholders.put("player_stats_profit", economyService.format(stats.getTotalWon() - stats.getMoneySpent()));
         placeholders.put("player_stats_last_purchase", stats.getLastPurchaseAt() == null ? "-" : stats.getLastPurchaseAt().format(WINNER_DATE_FORMAT));
         placeholders.put("player_stats_last_win", stats.getLastWinAt() == null ? "-" : stats.getLastWinAt().format(WINNER_DATE_FORMAT));
+        applyRankPlaceholders(placeholders, playerId);
     }
 
     private void applySeasonStatsPlaceholders(Map<String, String> placeholders, UUID playerId) {
@@ -1690,6 +2056,16 @@ public final class LotteryManager {
         placeholders.put("player_stats_profit", economyService.format(0.0D));
         placeholders.put("player_stats_last_purchase", "-");
         placeholders.put("player_stats_last_win", "-");
+        for (String statistic : List.of("rounds_played", "tickets_bought", "money_spent", "wins", "highest_win", "total_won", "current_tickets")) {
+            placeholders.put("my_rank_" + statistic, "-");
+        }
+    }
+
+    private void applyRankPlaceholders(Map<String, String> placeholders, UUID playerId) {
+        for (String statistic : List.of("rounds_played", "tickets_bought", "money_spent", "wins", "highest_win", "total_won", "current_tickets")) {
+            int rank = getPlayerRank(playerId, statistic);
+            placeholders.put("my_rank_" + statistic, rank > 0 ? String.valueOf(rank) : "-");
+        }
     }
 
     private void applyEmptySeasonStatsPlaceholders(Map<String, String> placeholders) {
@@ -1716,7 +2092,7 @@ public final class LotteryManager {
 
     public void resetRound() {
         currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
-        potReminderSent.remove(getActiveLotteryId());
+        clearRoundReminderState();
         appendLog("reset_round", Map.of());
         save();
     }
@@ -1934,6 +2310,7 @@ public final class LotteryManager {
         return title.equals(MessageUtil.color(getMainGuiTitle()))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")))
+            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("winner-wall-gui.title", "&6Gewinnerwand")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")))
@@ -1960,6 +2337,7 @@ public final class LotteryManager {
 
         boolean statsPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")));
         boolean personalStatsPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")));
+        boolean winnerWallPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("winner-wall-gui.title", "&6Gewinnerwand")));
         boolean languagePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")));
         boolean adminPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")));
         boolean profilePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")));
@@ -1975,6 +2353,12 @@ public final class LotteryManager {
         }
         if (adminOverviewPage) {
             handleAdminOverviewClick(player, slot);
+            return;
+        }
+        if (winnerWallPage) {
+            if (slot == plugin.getGuiConfig().getInt("winner-wall-gui.back-slot", 49)) {
+                openStatsMenu(player);
+            }
             return;
         }
         String itemRoot = statsPage ? "stats-gui.items" : personalStatsPage ? "personal-stats-gui.items" : languagePage ? "language-gui.items"
@@ -2027,6 +2411,37 @@ public final class LotteryManager {
             }
         }
 
+        player.openInventory(inventory);
+    }
+
+    public void openWinnerWall(Player player) {
+        int size = plugin.getGuiConfig().getInt("winner-wall-gui.size", 54);
+        Inventory inventory = Bukkit.createInventory(null, size,
+            MessageUtil.color(plugin.getGuiConfig().getString("winner-wall-gui.title", "&6Gewinnerwand")));
+        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("winner-wall-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+        ItemStack filler = createItem(fillerMaterial, "&0");
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            inventory.setItem(slot, filler);
+        }
+
+        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21};
+        List<WinnerEntry> winners = winnerHistory().stream().limit(slots.length).toList();
+        for (int index = 0; index < winners.size(); index++) {
+            WinnerEntry winner = winners.get(index);
+            inventory.setItem(slots[index], createItem(Material.PLAYER_HEAD,
+                "&6#" + (index + 1) + " " + winner.playerName(),
+                "&7Gewinn: &f" + economyService.format(winner.amount()),
+                "&7Tickets: &f" + winner.ticketsBought(),
+                "&7Datum: &f" + winner.wonAt().format(WINNER_DATE_FORMAT)));
+        }
+        if (winners.isEmpty()) {
+            inventory.setItem(22, createItem(Material.BARRIER, "&cNoch keine Gewinner", "&7Nach der ersten Ziehung füllt sich diese Wand."));
+        }
+
+        int backSlot = plugin.getGuiConfig().getInt("winner-wall-gui.back-slot", 49);
+        if (backSlot >= 0 && backSlot < inventory.getSize()) {
+            inventory.setItem(backSlot, createItem(Material.ARROW, "&aZurück", "&7Zurück zur Statistik."));
+        }
         player.openInventory(inventory);
     }
 
@@ -2289,7 +2704,8 @@ public final class LotteryManager {
         reload();
         appendLog("config_update", Map.of("updated", String.valueOf(updated), "sender", sender.getName()));
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.config-update-success", Map.of(
-            "files", String.valueOf(updated)
+            "files", String.valueOf(updated),
+            "report", plugin.getLastConfigUpdateReportFile() == null ? "-" : plugin.getLastConfigUpdateReportFile().getAbsolutePath()
         ));
     }
 
@@ -2344,6 +2760,10 @@ public final class LotteryManager {
         String topValue = resolveTopPlaceholder(normalizedParams);
         if (topValue != null) {
             return topValue;
+        }
+        if (normalizedParams.startsWith("my_rank_") && player != null) {
+            int rank = getPlayerRank(player.getUniqueId(), normalizeStatisticKey(normalizedParams.substring("my_rank_".length())));
+            return rank > 0 ? String.valueOf(rank) : "-";
         }
 
         return switch (normalizedParams) {
@@ -2442,7 +2862,12 @@ public final class LotteryManager {
     }
 
     private TopEntry getTopEntry(String statistic, int rank) {
-        List<TopEntry> entries = switch (statistic) {
+        List<TopEntry> entries = getTopEntryList(statistic);
+        return rank <= entries.size() ? entries.get(rank - 1) : null;
+    }
+
+    private List<TopEntry> getTopEntryList(String statistic) {
+        return switch (statistic) {
             case "rounds_played" -> getTopLongEntries(PlayerLotteryStats::getRoundsPlayed, value -> value + " Runden");
             case "tickets_bought" -> getTopLongEntries(PlayerLotteryStats::getTicketsBought, value -> value + " Tickets");
             case "money_spent" -> getTopDoubleEntries(PlayerLotteryStats::getMoneySpent, economyService::format);
@@ -2453,7 +2878,42 @@ public final class LotteryManager {
             case "last_winners" -> getLastWinnerEntries();
             default -> List.of();
         };
-        return rank <= entries.size() ? entries.get(rank - 1) : null;
+    }
+
+    private int getPlayerRank(UUID playerId, String statistic) {
+        List<UUID> rankedPlayers;
+        if ("current_tickets".equals(statistic)) {
+            rankedPlayers = currentRound().getTicketsByPlayer().entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .sorted(Map.Entry.<UUID, Integer>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+        } else {
+            rankedPlayers = playerStats.entrySet().stream()
+                .filter(entry -> getStatisticValue(entry.getValue(), statistic) > 0.0D)
+                .sorted(Comparator.<Map.Entry<UUID, PlayerLotteryStats>>comparingDouble(entry -> getStatisticValue(entry.getValue(), statistic)).reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+        }
+
+        for (int index = 0; index < rankedPlayers.size(); index++) {
+            if (rankedPlayers.get(index).equals(playerId)) {
+                return index + 1;
+            }
+        }
+        return 0;
+    }
+
+    private double getStatisticValue(PlayerLotteryStats stats, String statistic) {
+        return switch (statistic) {
+            case "rounds_played" -> stats.getRoundsPlayed();
+            case "tickets_bought" -> stats.getTicketsBought();
+            case "money_spent" -> stats.getMoneySpent();
+            case "wins" -> stats.getWins();
+            case "highest_win" -> stats.getHighestWin();
+            case "total_won" -> stats.getTotalWon();
+            default -> 0.0D;
+        };
     }
 
     private int getPendingNotificationCount() {
@@ -2648,6 +3108,7 @@ public final class LotteryManager {
     private void broadcastDrawAnnouncementForCurrentLottery() {
         Map<String, String> placeholders = createCommonPlaceholders(null);
         Bukkit.getConsoleSender().sendMessage(MessageUtil.prefixed(plugin.getMessagesConfig(), "messages.draw-announcement", placeholders));
+        maybeSendTicketHolderReminder(placeholders);
 
         boolean buttonEnabled = plugin.getConfig().getBoolean("announcements.draw.buy-button.enabled", true);
         String command = plugin.getConfig().getString("announcements.draw.buy-button.command", "/lottery gui");
@@ -2676,6 +3137,40 @@ public final class LotteryManager {
             }
             player.sendMessage(message);
         }
+    }
+
+    private void maybeSendTicketHolderReminder(Map<String, String> placeholders) {
+        if (!plugin.getConfig().getBoolean("notifications.ticket-holder-reminder.enabled", false)) {
+            return;
+        }
+
+        ZonedDateTime nextDraw = getNextDrawAt();
+        long minutesLeft = Duration.between(ZonedDateTime.now(getZoneId()), nextDraw).toMinutes();
+        long threshold = Math.max(1L, plugin.getConfig().getLong("notifications.ticket-holder-reminder.minutes-before-draw", 10L));
+        if (minutesLeft < 0L || minutesLeft > threshold) {
+            return;
+        }
+
+        String key = getActiveLotteryId() + ":" + formatDrawKey(nextDraw);
+        if (ticketHolderReminderSent.getOrDefault(key, false)) {
+            return;
+        }
+        ticketHolderReminderSent.put(key, true);
+
+        Map<String, String> reminderPlaceholders = new HashMap<>(placeholders);
+        reminderPlaceholders.put("minutes", String.valueOf(Math.max(0L, minutesLeft)));
+        for (UUID playerId : currentRound().getTicketsByPlayer().keySet()) {
+            Player onlinePlayer = Bukkit.getPlayer(playerId);
+            if (onlinePlayer != null && isNotificationEnabled(playerId, "draw")) {
+                MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.ticket-holder-reminder", reminderPlaceholders);
+            }
+        }
+    }
+
+    private void clearRoundReminderState() {
+        String lotteryId = getActiveLotteryId();
+        potReminderSent.remove(lotteryId);
+        ticketHolderReminderSent.keySet().removeIf(key -> key.startsWith(lotteryId + ":"));
     }
 
     private void updateHolograms() {
@@ -2825,7 +3320,7 @@ public final class LotteryManager {
 
         if (currentRound().getTotalTickets() <= 0) {
             currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
-            potReminderSent.remove(getActiveLotteryId());
+            clearRoundReminderState();
             setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
@@ -2846,7 +3341,7 @@ public final class LotteryManager {
         if (currentRound().getUniquePlayers() < getMinimumPlayers()) {
             RefundSummary refundSummary = shouldRefundOnNotEnoughPlayers() ? refundCurrentRoundTickets() : RefundSummary.empty();
             currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
-            potReminderSent.remove(getActiveLotteryId());
+            clearRoundReminderState();
             setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
@@ -2896,6 +3391,7 @@ public final class LotteryManager {
         placeholders.put("winners", formatWinnerPayouts(winnerPayouts));
         Player onlineWinner = Bukkit.getPlayer(mainWinner.playerId());
         long winnerDelay = runDrawAnimation(placeholders);
+        runGuiDrawAnimation(winnerPayouts, winnerDelay);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (plugin.getConfig().getBoolean("draw-animation.enabled", false)) {
                 broadcastConfigured("messages.draw-animation-reveal", placeholders, onlineWinner);
@@ -2930,7 +3426,7 @@ public final class LotteryManager {
             ));
         }
         currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
-        potReminderSent.remove(getActiveLotteryId());
+        clearRoundReminderState();
         save();
         appendLog("draw_winner", placeholders);
         runAutoBackupAfterDraw();
@@ -3085,6 +3581,62 @@ public final class LotteryManager {
         return delay;
     }
 
+    private void runGuiDrawAnimation(List<WinnerPayout> winnerPayouts, long revealDelay) {
+        if (!plugin.getConfig().getBoolean("draw-animation.gui.enabled", false) || winnerPayouts.isEmpty()) {
+            return;
+        }
+
+        List<String> candidates = currentRound().getTicketsByPlayer().keySet().stream()
+            .map(this::getCachedPlayerName)
+            .toList();
+        if (candidates.isEmpty()) {
+            return;
+        }
+
+        int size = plugin.getConfig().getInt("draw-animation.gui.size", 27);
+        int slot = Math.max(0, Math.min(size - 1, plugin.getConfig().getInt("draw-animation.gui.winner-slot", 13)));
+        String title = MessageUtil.color(plugin.getConfig().getString("draw-animation.gui.title", "&6Lotterie Ziehung"));
+        int spins = Math.max(3, plugin.getConfig().getInt("draw-animation.gui.spins", 12));
+        long interval = Math.max(1L, plugin.getConfig().getLong("draw-animation.gui.interval-ticks", 4L));
+        List<Player> viewers = new ArrayList<>(Bukkit.getOnlinePlayers());
+
+        for (Player viewer : viewers) {
+            Inventory inventory = Bukkit.createInventory(null, size, title);
+            ItemStack filler = createItem(Material.BLACK_STAINED_GLASS_PANE, "&0");
+            for (int index = 0; index < size; index++) {
+                inventory.setItem(index, filler);
+            }
+            viewer.openInventory(inventory);
+        }
+
+        for (int spin = 0; spin < spins; spin++) {
+            long delay = spin * interval;
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                String candidate = candidates.get(random.nextInt(candidates.size()));
+                for (Player viewer : viewers) {
+                    if (viewer.isOnline() && viewer.getOpenInventory() != null) {
+                        viewer.getOpenInventory().getTopInventory().setItem(slot, createItem(Material.NAME_TAG,
+                            "&e" + candidate,
+                            "&7Die Ziehung läuft..."));
+                    }
+                }
+            }, delay);
+        }
+
+        long finalDelay = Math.max(revealDelay, spins * interval);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            WinnerPayout winner = winnerPayouts.get(0);
+            for (Player viewer : viewers) {
+                if (viewer.isOnline() && viewer.getOpenInventory() != null) {
+                    viewer.getOpenInventory().getTopInventory().setItem(slot, createItem(Material.NETHER_STAR,
+                        "&6" + winner.playerName(),
+                        "&7Gewinn: &f" + economyService.format(winner.amount()),
+                        "&7Tickets: &f" + winner.tickets()));
+                }
+            }
+        }, finalDelay);
+    }
+
     private RefundSummary refundCurrentRoundTickets() {
         double refunded = 0.0D;
         int refundedPlayers = 0;
@@ -3205,6 +3757,12 @@ public final class LotteryManager {
         zipOutputStream.closeEntry();
     }
 
+    private void addStringToZip(ZipOutputStream zipOutputStream, String entryName, String content) throws IOException {
+        zipOutputStream.putNextEntry(new ZipEntry(entryName));
+        zipOutputStream.write(content.getBytes(StandardCharsets.UTF_8));
+        zipOutputStream.closeEntry();
+    }
+
     public void appendLog(String action, Map<String, String> values) {
         if (!plugin.getConfig().getBoolean("admin-log.enabled", true)) {
             return;
@@ -3238,6 +3796,7 @@ public final class LotteryManager {
         transactionConfig.set(path + ".type", type);
         transactionConfig.set(path + ".player", player);
         transactionConfig.set(path + ".amount", economyService.format(amount));
+        transactionConfig.set(path + ".raw-amount", amount);
         transactionConfig.set(path + ".details", formatTransactionDetails(details));
         trimTransactionLog();
         try {
@@ -3399,6 +3958,7 @@ public final class LotteryManager {
 
         String payload;
         if (plugin.getConfig().getBoolean("webhook.embed.enabled", false)) {
+            Map<String, String> placeholders = createCommonPlaceholders(null);
             String title = applyWebhookPlaceholders(plugin.getConfig().getString("webhook.embed.title", "Lottery Gewinner"), winnerName, amount, winnerTickets);
             String description = applyWebhookPlaceholders(plugin.getConfig().getString("webhook.embed.description", "%player% hat %amount% gewonnen."), winnerName, amount, winnerTickets);
             int color = plugin.getConfig().getInt("webhook.embed.color", 16766720);
@@ -3410,6 +3970,8 @@ public final class LotteryManager {
                 + "{\"name\":\"Gewinner\",\"value\":\"" + escapeJson(winnerName) + "\",\"inline\":true},"
                 + "{\"name\":\"Gewinn\",\"value\":\"" + escapeJson(economyService.format(amount)) + "\",\"inline\":true},"
                 + "{\"name\":\"Tickets\",\"value\":\"" + winnerTickets + "\",\"inline\":true},"
+                + "{\"name\":\"Lotterie\",\"value\":\"" + escapeJson(getActiveLotteryDisplayName()) + "\",\"inline\":true},"
+                + "{\"name\":\"Topf\",\"value\":\"" + escapeJson(placeholders.getOrDefault("pot", "")) + "\",\"inline\":true},"
                 + "{\"name\":\"Nächste Ziehung\",\"value\":\"" + escapeJson(formatNextDraw()) + "\",\"inline\":false}"
                 + "]}]}";
         } else {
@@ -4932,6 +5494,12 @@ public final class LotteryManager {
                 continue;
             }
 
+            if (lowerAction.equals("open-winner-wall") || lowerAction.equals("open-winners")) {
+                openWinnerWall(player);
+                refresh = false;
+                continue;
+            }
+
             if (lowerAction.equals("open-language")) {
                 openLanguageMenu(player);
                 refresh = false;
@@ -5178,5 +5746,32 @@ public final class LotteryManager {
     }
 
     private record TopEntry(String name, String value) {
+    }
+
+    private record AdminStatsSnapshot(
+        double ticketRevenueToday,
+        double ticketRevenueWeek,
+        double ticketRevenueMonth,
+        double payoutsMonth,
+        double refundsMonth,
+        double ticketTaxesAllTime,
+        double payoutTaxesAllTime,
+        int purchasesToday,
+        double payoutRatioMonth
+    ) {
+        private double taxesAllTime() {
+            return ticketTaxesAllTime + payoutTaxesAllTime;
+        }
+    }
+
+    private static final class PurchaseWindow {
+        private long startedAtMillis;
+        private int tickets;
+        private double spent;
+        private boolean warned;
+
+        private PurchaseWindow(long startedAtMillis) {
+            this.startedAtMillis = startedAtMillis;
+        }
     }
 }

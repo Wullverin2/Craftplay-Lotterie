@@ -29,7 +29,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
         "season", "preview", "editor", "lotteries", "transactions", "profile", "profiles", "reminders",
-        "grantfree", "updateconfigs"
+        "grantfree", "updateconfigs", "setupwizard", "audit", "web", "adminstats", "taxreport", "winnerwall"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -92,9 +92,11 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "payments" -> handlePayments(sender);
             case "backup" -> handleBackup(sender);
             case "export" -> handleExport(sender, args);
+            case "audit" -> handleAudit(sender);
+            case "web" -> handleWeb(sender);
             case "import" -> handleImport(sender, args);
             case "debug" -> handleDebug(sender);
-            case "doctor" -> handleDoctor(sender);
+            case "doctor" -> handleDoctor(sender, args);
             case "log" -> handleLog(sender, args);
             case "setup" -> handleSetup(sender, args);
             case "season" -> handleSeason(sender, args);
@@ -103,8 +105,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "lotteries" -> handleLotteries(sender, args);
             case "profile", "profiles" -> handleProfile(sender, args);
             case "transactions" -> handleTransactions(sender, args);
+            case "adminstats" -> handleAdminStats(sender);
+            case "taxreport" -> handleTaxReport(sender);
             case "grantfree" -> handleGrantFree(sender, args);
             case "updateconfigs" -> handleUpdateConfigs(sender);
+            case "setupwizard" -> handleSetupWizard(sender);
+            case "winnerwall" -> handleWinnerWall(sender);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -158,9 +164,13 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             } else if ("payments".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("retry"));
             } else if ("admin".equals(subcommand) && sender.hasPermission("lottery.admin")) {
-                addMatching(suggestions, args[1], List.of("menu", "overview", "rounds", "transactions", "log", "payments"));
+                addMatching(suggestions, args[1], List.of("menu", "overview", "rounds", "transactions", "log", "payments", "stats", "taxes"));
             } else if ("editor".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("menu", "list", "set", "updateconfigs"));
+            } else if ("doctor".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("fix"));
+            } else if ("export".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("csv", "web", "audit"));
             } else if ("setup".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup", "type", "fixedprize", "profile"));
             } else if ("season".equals(subcommand) && sender.hasPermission("lottery.admin")) {
@@ -303,6 +313,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case "transactions" -> lotteryManager.listTransactions(sender, 1);
                 case "log" -> lotteryManager.listAdminLog(sender, 1);
                 case "payments" -> lotteryManager.listPendingPaymentOverview(sender);
+                case "stats" -> lotteryManager.showAdminStats(sender);
+                case "taxes" -> lotteryManager.showTaxReport(sender);
                 case "overview" -> {
                     if (!(sender instanceof Player player)) {
                         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
@@ -570,7 +582,33 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             lotteryManager.exportCsv(sender);
             return true;
         }
+        if (args.length >= 2 && "web".equalsIgnoreCase(args[1])) {
+            lotteryManager.exportWebOverview(sender);
+            return true;
+        }
+        if (args.length >= 2 && "audit".equalsIgnoreCase(args[1])) {
+            lotteryManager.createAuditExport(sender);
+            return true;
+        }
         lotteryManager.exportData(sender);
+        return true;
+    }
+
+    private boolean handleAudit(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.createAuditExport(sender);
+        return true;
+    }
+
+    private boolean handleWeb(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.exportWebOverview(sender);
         return true;
     }
 
@@ -599,9 +637,13 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleDoctor(CommandSender sender) {
+    private boolean handleDoctor(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (args.length >= 2 && "fix".equalsIgnoreCase(args[1])) {
+            lotteryManager.fixDoctorIssues(sender);
             return true;
         }
         lotteryManager.runDoctor(sender);
@@ -843,6 +885,45 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleAdminStats(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.showAdminStats(sender);
+        return true;
+    }
+
+    private boolean handleTaxReport(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.showTaxReport(sender);
+        return true;
+    }
+
+    private boolean handleSetupWizard(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.showSetupWizard(sender);
+        return true;
+    }
+
+    private boolean handleWinnerWall(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        lotteryManager.openWinnerWall(player);
+        return true;
+    }
+
     private boolean handleHologram(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
@@ -953,6 +1034,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         sendHelpLine(sender, "messages.help-line-gui", "/lottery gui");
         sendHelpLine(sender, "messages.help-line-profile", "/lottery profile");
         sendHelpLine(sender, "messages.help-line-reminders", "/lottery reminders");
+        sendHelpLine(sender, "messages.help-line-winnerwall", "/lottery winnerwall");
         sendHelpLine(sender, "messages.help-line-winners", "/lottery winners");
         sendHelpLine(sender, "messages.help-line-nextdraw", "/lottery nextdraw");
         if (sender.hasPermission("lottery.admin")) {
@@ -974,7 +1056,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return switch (subcommand) {
             case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
                 "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
-                "preview", "editor", "lotteries", "transactions", "grantfree", "updateconfigs" -> sender.hasPermission("lottery.admin");
+                "preview", "editor", "lotteries", "transactions", "grantfree", "updateconfigs", "setupwizard", "audit",
+                "web", "adminstats", "taxreport" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }
