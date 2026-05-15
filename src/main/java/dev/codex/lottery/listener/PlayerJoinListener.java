@@ -20,6 +20,7 @@ public final class PlayerJoinListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         lotteryManager.sendPendingNotifications(event.getPlayer());
+        plugin.getUpdateChecker().notifyPlayerOnJoin(event.getPlayer());
 
         if (!plugin.getConfig().getBoolean("notifications.join-reminder.enabled", true)) {
             return;

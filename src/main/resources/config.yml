@@ -4,7 +4,30 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 6
+config-version: 7
+
+update-checker:
+  # DE: Aktiviert die Prüfung auf neue Plugin-Versionen über GitHub Releases.
+  # EN: Enables checking for new plugin versions through GitHub Releases.
+  enabled: true
+  # DE: GitHub-Repository im Format Besitzer/Repository. Daraus wird die Standard-API-URL gebaut.
+  # EN: GitHub repository in owner/repository format. This is used to build the default API URL.
+  repository: "Wullverin2/Craftplay-Lotterie"
+  # DE: Optionale vollständige GitHub-API-URL. Leer bedeutet: nutze repository + /releases/latest.
+  # EN: Optional full GitHub API URL. Empty means: use repository + /releases/latest.
+  api-url: ""
+  # DE: Prüft beim Serverstart asynchron, ob ein neuer Release verfügbar ist.
+  # EN: Checks asynchronously on server startup whether a new release is available.
+  check-on-startup: true
+  # DE: Benachrichtigt Admins beim Join, wenn seit der letzten Prüfung ein neuer Release bekannt ist.
+  # EN: Notifies admins on join when the latest check found a newer release.
+  notify-admins-on-join: true
+  # DE: Cache-Zeit in Minuten, bevor automatische Prüfungen erneut GitHub abfragen.
+  # EN: Cache time in minutes before automatic checks query GitHub again.
+  cache-minutes: 60
+  # DE: Timeout der GitHub-Anfrage in Sekunden.
+  # EN: Timeout for the GitHub request in seconds.
+  timeout-seconds: 10
 
 settings:
   # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.

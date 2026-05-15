@@ -28,6 +28,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Optionales Anti-Abuse-Monitoring für auffällige Kaufspitzen
 - Animiertes Ziehungs-GUI und Gewinnerwand
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
+- GitHub-Release-Updatechecker mit Startprüfung, Admin-Join-Hinweis und manuellem `/lottery updatecheck`
 - Sprachdateien für Deutsch und Englisch im Ordner `lang`
 - Referenzdateien mit Kommentaren werden beim Start unter `reference/` abgelegt
 
@@ -95,6 +96,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery lotteries select <profil>`
 - `/lottery grantfree <spieler> <grund> [anzahl]`
 - `/lottery updateconfigs`
+- `/lottery updatecheck`
 - `/lottery setup <price|minplayers|drawtime|adddrawtime|multipledraws> <wert>`
 - `/lottery setup <cooldown|dailytickets|dailyspend|winners|shares|autobackup|type|fixedprize|profile> <wert>`
 - `/lottery season reset [saison-id]`
@@ -114,6 +116,10 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `data.yml`: Laufende Runden, Historie, Statistiken, Saisonpunkte und offene Nachrichten.
 - `transactions.yml`: Ticketkäufe, Rückerstattungen, Steuern, Auszahlungen und Shopkäufe.
 - `admin-log.yml`: Admin-Aktionen und Sicherheitsereignisse.
+
+## Update-Checker
+
+Der Update-Checker fragt standardmäßig den neuesten GitHub Release von `https://api.github.com/repos/Wullverin2/Craftplay-Lotterie/releases/latest` ab. Die Quelle, Cache-Zeit, Startprüfung und Admin-Join-Benachrichtigung können in `config.yml` unter `update-checker` angepasst oder vollständig deaktiviert werden.
 
 ## PlaceholderAPI
 

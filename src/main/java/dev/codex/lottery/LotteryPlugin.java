@@ -6,6 +6,7 @@ import dev.codex.lottery.hook.LotteryPlaceholderExpansion;
 import dev.codex.lottery.listener.PlayerJoinListener;
 import dev.codex.lottery.service.EconomyService;
 import dev.codex.lottery.service.LotteryManager;
+import dev.codex.lottery.service.UpdateChecker;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +32,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 6;
+    private static final int CONFIG_VERSION = 7;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -43,6 +44,7 @@ public final class LotteryPlugin extends JavaPlugin {
     private File hologramsFile;
     private File lotteriesFile;
     private File lastConfigUpdateReportFile;
+    private UpdateChecker updateChecker;
     private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
 
     @Override
@@ -65,7 +67,9 @@ public final class LotteryPlugin extends JavaPlugin {
         this.lotteryManager = new LotteryManager(this, economyService);
         lotteryManager.load();
         lotteryManager.startScheduler();
+        this.updateChecker = new UpdateChecker(this);
         runStartupChecks();
+        updateChecker.checkOnStartup();
 
         LotteryCommand command = new LotteryCommand(this, lotteryManager);
         Objects.requireNonNull(getCommand("lottery"), "lottery command not defined").setExecutor(command);
@@ -91,6 +95,7 @@ public final class LotteryPlugin extends JavaPlugin {
         reloadConfig();
         migrateConfigIfNeeded();
         loadCustomConfigs();
+        updateChecker = new UpdateChecker(this);
         if (lotteryManager != null) {
             lotteryManager.reload();
             lotteryManager.startScheduler();
@@ -99,6 +104,10 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public EconomyService getEconomyService() {
         return economyService;
+    }
+
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
     }
 
     public FileConfiguration getMessagesConfig() {

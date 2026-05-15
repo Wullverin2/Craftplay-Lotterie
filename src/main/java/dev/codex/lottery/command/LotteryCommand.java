@@ -29,7 +29,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
         "season", "preview", "editor", "lotteries", "transactions", "profile", "profiles", "reminders",
-        "grantfree", "updateconfigs", "setupwizard", "audit", "web", "adminstats", "taxreport", "winnerwall"
+        "grantfree", "updateconfigs", "setupwizard", "audit", "web", "adminstats", "taxreport", "winnerwall",
+        "updatecheck"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -111,6 +112,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "updateconfigs" -> handleUpdateConfigs(sender);
             case "setupwizard" -> handleSetupWizard(sender);
             case "winnerwall" -> handleWinnerWall(sender);
+            case "updatecheck" -> handleUpdateCheck(sender);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -842,6 +844,15 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleUpdateCheck(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        plugin.getUpdateChecker().checkNow(sender, true);
+        return true;
+    }
+
     private boolean handleLotteries(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
@@ -1057,7 +1068,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
                 "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
                 "preview", "editor", "lotteries", "transactions", "grantfree", "updateconfigs", "setupwizard", "audit",
-                "web", "adminstats", "taxreport" -> sender.hasPermission("lottery.admin");
+                "web", "adminstats", "taxreport", "updatecheck" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }
