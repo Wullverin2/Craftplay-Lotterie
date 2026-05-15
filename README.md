@@ -11,13 +11,17 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Rückerstattung bei zu wenigen Spielern, auch mit Offline-Benachrichtigung
 - Mehrere Gewinner, feste Auszahlungen, Gewinnanteile und Gewinnpakete
 - Getrennte Lotterie-Profile über `lotteries.yml` mit eigenen Runden, Töpfen, Historien und Ziehzeiten
+- Spieler können ihr persönliches Lotterie-Profil über `/lottery profile` wählen
+- Persönliche Reminder für Ziehung, Gewinn, Rückerstattung und Topf-Schwelle über `/lottery reminders`
 - Lotterie-Typen `jackpot`, `fifty_fifty`, `fixed_prize` und optionale Item-Lotterie
 - Persistente Daten für Tickets, Ausgaben, Gewinne, Gewinnerhistorie, Saisonpunkte und Offline-Zahlungen
 - Statistik-GUI mit Top-10-Listen und letzten 10 Gewinnern
 - Countdown- und Statistik-Hologramme mit eigenen Templates
 - Saisonstatistiken, automatische Saisonwechsel, Saisonbelohnungen und Saison-Shop
 - Kostenlose Tickets über `/lottery free [grund]`
+- Admins können Spielern kostenlose Tickets für Events, Votes, Jobs oder Quests gewähren
 - Admin-GUI, Admin-Log, Transaktionslog mit Filter, CSV/YAML-Export, Import, Backup und Doctor
+- GUI-Editor und Config-Updater für fehlende Default-Keys
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
 - Sprachdateien für Deutsch und Englisch im Ordner `lang`
 - Referenzdateien mit Kommentaren werden beim Start unter `reference/` abgelegt
@@ -31,6 +35,9 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery shop`
 - `/lottery shop buy <reward>`
 - `/lottery gui`
+- `/lottery profile [profil]`
+- `/lottery reminders`
+- `/lottery reminders <draw|win|refund|pot> <on|off>`
 - `/lottery jackpot`
 - `/lottery winners`
 - `/lottery stats`
@@ -43,6 +50,11 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery reset`
 - `/lottery info <spieler>`
 - `/lottery admin`
+- `/lottery admin overview`
+- `/lottery admin rounds`
+- `/lottery admin transactions`
+- `/lottery admin log`
+- `/lottery admin payments`
 - `/lottery notifications list [spieler]`
 - `/lottery notifications clear <spieler|all>`
 - `/lottery payments retry`
@@ -60,8 +72,13 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery transactions filter <player|type|date|details> <wert> [seite]`
 - `/lottery preview <gui|draw|holograms>`
 - `/lottery editor`
+- `/lottery editor list <gui|stats-gui|personal-stats-gui|language-gui|admin-gui>`
+- `/lottery editor set <gui> <item> <slot|material|name|permission|hide_without_permission|lore|actions|add_action|buy_amount> <wert>`
+- `/lottery editor updateconfigs`
 - `/lottery lotteries list`
 - `/lottery lotteries select <profil>`
+- `/lottery grantfree <spieler> <grund> [anzahl]`
+- `/lottery updateconfigs`
 - `/lottery setup <price|minplayers|drawtime|adddrawtime|multipledraws> <wert>`
 - `/lottery setup <cooldown|dailytickets|dailyspend|winners|shares|autobackup|type|fixedprize|profile> <wert>`
 - `/lottery season reset [saison-id]`
@@ -89,6 +106,10 @@ Beispiele:
 - `%lottery_jackpot%`
 - `%lottery_payout_pot%`
 - `%lottery_ticket_price%`
+- `%lottery_lottery_id%`
+- `%lottery_lottery_name%`
+- `%lottery_selected_lottery_id%`
+- `%lottery_selected_lottery_name%`
 - `%lottery_next_draw%`
 - `%lottery_time_left%`
 - `%lottery_total_tickets%`

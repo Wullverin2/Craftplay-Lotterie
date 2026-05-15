@@ -17,6 +17,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 public final class LotteryCommand implements CommandExecutor, TabCompleter {
@@ -27,7 +28,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         "help", "buy", "free", "shop", "gui", "jackpot", "winners", "stats", "nextdraw",
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
-        "season", "preview", "editor", "lotteries", "transactions"
+        "season", "preview", "editor", "lotteries", "transactions", "profile", "profiles", "reminders",
+        "grantfree", "updateconfigs"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -84,8 +86,9 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "reset" -> handleReset(sender);
             case "info" -> handleInfo(sender, args);
             case "hologram" -> handleHologram(sender, args);
-            case "admin" -> handleAdmin(sender);
+            case "admin" -> handleAdmin(sender, args);
             case "notifications" -> handleNotifications(sender, args);
+            case "reminders" -> handleReminders(sender, args);
             case "payments" -> handlePayments(sender);
             case "backup" -> handleBackup(sender);
             case "export" -> handleExport(sender, args);
@@ -96,9 +99,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "setup" -> handleSetup(sender, args);
             case "season" -> handleSeason(sender, args);
             case "preview" -> handlePreview(sender, args);
-            case "editor" -> handleEditor(sender);
+            case "editor" -> handleEditor(sender, args);
             case "lotteries" -> handleLotteries(sender, args);
+            case "profile", "profiles" -> handleProfile(sender, args);
             case "transactions" -> handleTransactions(sender, args);
+            case "grantfree" -> handleGrantFree(sender, args);
+            case "updateconfigs" -> handleUpdateConfigs(sender);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -127,6 +133,17 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 addMatching(suggestions, args[1], List.of("default", "playtime", "jobs", "quests", "votes"));
             } else if ("shop".equals(subcommand)) {
                 addMatching(suggestions, args[1], List.of("buy"));
+            } else if ("profile".equals(subcommand) || "profiles".equals(subcommand)) {
+                addMatching(suggestions, args[1], lotteryManager.getLotteryProfileIds());
+            } else if ("reminders".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("draw", "win", "refund", "pot"));
+            } else if ("grantfree".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                    String name = onlinePlayer.getName();
+                    if (name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                        suggestions.add(name);
+                    }
+                }
             } else if ("info".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                     String name = onlinePlayer.getName();
@@ -140,6 +157,10 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 addMatching(suggestions, args[1], List.of("list", "clear"));
             } else if ("payments".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("retry"));
+            } else if ("admin".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("menu", "overview", "rounds", "transactions", "log", "payments"));
+            } else if ("editor".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("menu", "list", "set", "updateconfigs"));
             } else if ("setup".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup", "type", "fixedprize", "profile"));
             } else if ("season".equals(subcommand) && sender.hasPermission("lottery.admin")) {
@@ -155,6 +176,22 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 3 && "shop".equalsIgnoreCase(args[0]) && "buy".equalsIgnoreCase(args[1])) {
             addMatching(suggestions, args[2], List.of("default"));
+        } else if (args.length == 3 && "reminders".equalsIgnoreCase(args[0])) {
+            addMatching(suggestions, args[2], List.of("on", "off"));
+        } else if (args.length == 3 && "editor".equalsIgnoreCase(args[0]) && "list".equalsIgnoreCase(args[1])
+            && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[2], List.of("gui", "stats-gui", "personal-stats-gui", "language-gui", "admin-gui"));
+        } else if (args.length == 3 && "editor".equalsIgnoreCase(args[0]) && "set".equalsIgnoreCase(args[1])
+            && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[2], List.of("gui", "stats-gui", "personal-stats-gui", "language-gui", "admin-gui"));
+        } else if (args.length == 4 && "editor".equalsIgnoreCase(args[0]) && "set".equalsIgnoreCase(args[1])
+            && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[3], getGuiItemKeys(args[2]));
+        } else if (args.length == 5 && "editor".equalsIgnoreCase(args[0]) && "set".equalsIgnoreCase(args[1])
+            && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[4], List.of("slot", "material", "name", "permission", "hide_without_permission", "lore", "actions", "add_action", "buy_amount"));
+        } else if (args.length == 3 && "grantfree".equalsIgnoreCase(args[0]) && sender.hasPermission("lottery.admin")) {
+            addMatching(suggestions, args[2], List.of("default", "playtime", "jobs", "quests", "votes", "event"));
         } else if (args.length == 3 && "transactions".equalsIgnoreCase(args[0])
             && "filter".equalsIgnoreCase(args[1]) && sender.hasPermission("lottery.admin")) {
             addMatching(suggestions, args[2], List.of("player", "type", "date", "details"));
@@ -255,17 +292,86 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleAdmin(CommandSender sender) {
+    private boolean handleAdmin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
+        if (args.length >= 2) {
+            switch (args[1].toLowerCase(Locale.ROOT)) {
+                case "rounds" -> lotteryManager.showActiveRounds(sender);
+                case "transactions" -> lotteryManager.listTransactions(sender, 1);
+                case "log" -> lotteryManager.listAdminLog(sender, 1);
+                case "payments" -> lotteryManager.listPendingPaymentOverview(sender);
+                case "overview" -> {
+                    if (!(sender instanceof Player player)) {
+                        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+                        return true;
+                    }
+                    lotteryManager.openAdminOverviewMenu(player);
+                }
+                case "menu" -> {
+                    if (!(sender instanceof Player player)) {
+                        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+                        return true;
+                    }
+                    lotteryManager.openAdminMenu(player);
+                }
+                default -> MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.admin-usage");
+            }
+            return true;
+        }
+
         if (!(sender instanceof Player player)) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
             return true;
         }
 
         lotteryManager.openAdminMenu(player);
+        return true;
+    }
+
+    private boolean handleProfile(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+
+        if (args.length >= 2) {
+            lotteryManager.setPlayerLottery(player, args[1], true);
+            return true;
+        }
+
+        lotteryManager.openProfileMenu(player);
+        lotteryManager.listPlayerLotteries(player);
+        return true;
+    }
+
+    private boolean handleReminders(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+
+        if (args.length < 3) {
+            lotteryManager.showNotificationPreferences(player);
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reminder-usage");
+            return true;
+        }
+
+        String state = args[2].toLowerCase(Locale.ROOT);
+        if (!state.equals("on") && !state.equals("off")) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reminder-usage");
+            return true;
+        }
+
+        lotteryManager.setNotificationPreference(player, args[1], state.equals("on"));
         return true;
     }
 
@@ -628,16 +734,69 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleEditor(CommandSender sender) {
+    private boolean handleEditor(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
+        if (args.length >= 2) {
+            String action = args[1].toLowerCase(Locale.ROOT);
+            if ("list".equals(action)) {
+                if (args.length < 3) {
+                    MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-usage");
+                    return true;
+                }
+                lotteryManager.listGuiEditorItems(sender, args[2]);
+                return true;
+            }
+            if ("set".equals(action)) {
+                if (args.length < 6) {
+                    MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-usage");
+                    return true;
+                }
+                lotteryManager.editGuiItem(sender, args[2], args[3], args[4], joinArgs(args, 5));
+                return true;
+            }
+            if ("updateconfigs".equals(action)) {
+                lotteryManager.updateConfigFiles(sender);
+                return true;
+            }
+            if (!"menu".equals(action)) {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-usage");
+                return true;
+            }
+        }
+
         if (!(sender instanceof Player player)) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.setup-usage");
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
             return true;
         }
-        lotteryManager.openAdminMenu(player);
+        lotteryManager.openGuiEditorMenu(player);
+        return true;
+    }
+
+    private boolean handleGrantFree(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        if (args.length < 3) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.grantfree-usage");
+            return true;
+        }
+
+        String reason = args[2];
+        int amount = args.length >= 4 ? parsePositiveInt(args[3], 1) : 1;
+        lotteryManager.grantFreeTickets(sender, Bukkit.getOfflinePlayer(args[1]), reason, amount);
+        return true;
+    }
+
+    private boolean handleUpdateConfigs(CommandSender sender) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return true;
+        }
+        lotteryManager.updateConfigFiles(sender);
         return true;
     }
 
@@ -741,6 +900,17 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return values;
     }
 
+    private String joinArgs(String[] args, int startIndex) {
+        StringBuilder builder = new StringBuilder();
+        for (int index = startIndex; index < args.length; index++) {
+            if (index > startIndex) {
+                builder.append(' ');
+            }
+            builder.append(args[index]);
+        }
+        return builder.toString();
+    }
+
     private boolean isInteger(String value) {
         try {
             Integer.parseInt(value.trim());
@@ -748,6 +918,22 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         } catch (NumberFormatException exception) {
             return false;
         }
+    }
+
+    private List<String> getGuiItemKeys(String menu) {
+        String root = switch (menu.toLowerCase(Locale.ROOT).replace("_", "-")) {
+            case "main" -> "gui";
+            case "stats", "statistik" -> "stats-gui";
+            case "personal", "personal-stats" -> "personal-stats-gui";
+            case "language", "sprache" -> "language-gui";
+            case "admin" -> "admin-gui";
+            default -> menu;
+        };
+        ConfigurationSection section = plugin.getGuiConfig().getConfigurationSection(root + ".items");
+        if (section == null) {
+            return List.of();
+        }
+        return section.getKeys(false).stream().sorted().toList();
     }
 
     private boolean requireUsePermission(CommandSender sender) {
@@ -765,6 +951,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         sendHelpLine(sender, "messages.help-line-free", "/lottery free");
         sendHelpLine(sender, "messages.help-line-shop", "/lottery shop");
         sendHelpLine(sender, "messages.help-line-gui", "/lottery gui");
+        sendHelpLine(sender, "messages.help-line-profile", "/lottery profile");
+        sendHelpLine(sender, "messages.help-line-reminders", "/lottery reminders");
         sendHelpLine(sender, "messages.help-line-winners", "/lottery winners");
         sendHelpLine(sender, "messages.help-line-nextdraw", "/lottery nextdraw");
         if (sender.hasPermission("lottery.admin")) {
@@ -786,7 +974,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return switch (subcommand) {
             case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
                 "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
-                "preview", "editor", "lotteries", "transactions" -> sender.hasPermission("lottery.admin");
+                "preview", "editor", "lotteries", "transactions", "grantfree", "updateconfigs" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }

@@ -27,7 +27,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 4;
+    private static final int CONFIG_VERSION = 5;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -109,6 +109,14 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public FileConfiguration getGuiConfig() {
         return guiConfig;
+    }
+
+    public void saveGuiConfig() {
+        try {
+            guiConfig.save(new File(getDataFolder(), "gui/gui.yml"));
+        } catch (IOException exception) {
+            getLogger().severe("Could not save gui.yml: " + exception.getMessage());
+        }
     }
 
     public FileConfiguration getHologramsConfig() {
@@ -293,6 +301,51 @@ public final class LotteryPlugin extends JavaPlugin {
         getConfig().set("config-version", CONFIG_VERSION);
         saveConfig();
         getLogger().info("Config migrated to version " + CONFIG_VERSION + ".");
+    }
+
+    public int updateConfigDefaults() {
+        int updatedFiles = 0;
+        updatedFiles += updateConfigDefaults("config.yml", new File(getDataFolder(), "config.yml")) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml")) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("holograms.yml", hologramsFile) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lotteries.yml", lotteriesFile) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lang/de.yml", new File(getDataFolder(), "lang/de.yml")) ? 1 : 0;
+        updatedFiles += updateConfigDefaults("lang/en.yml", new File(getDataFolder(), "lang/en.yml")) ? 1 : 0;
+        reloadConfig();
+        loadCustomConfigs();
+        writeDefaultReferenceFiles();
+        return updatedFiles;
+    }
+
+    private boolean updateConfigDefaults(String resourcePath, File file) {
+        try (InputStream inputStream = getResource(resourcePath)) {
+            if (inputStream == null) {
+                return false;
+            }
+            if (file.getParentFile() != null && !file.getParentFile().exists() && !file.getParentFile().mkdirs()) {
+                getLogger().warning("Could not create folder for " + file.getName());
+                return false;
+            }
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+            String before = config.saveToString();
+            YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+            config.setDefaults(defaults);
+            config.options().copyDefaults(true);
+            if (!before.equals(config.saveToString())) {
+                File backup = new File(getDataFolder(), "migrations/" + file.getName() + "-defaults-" + System.currentTimeMillis() + ".yml");
+                if (file.exists()) {
+                    if (backup.getParentFile() != null && !backup.getParentFile().exists()) {
+                        backup.getParentFile().mkdirs();
+                    }
+                    Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+                config.save(file);
+                return true;
+            }
+        } catch (IOException exception) {
+            getLogger().warning("Could not update defaults for " + resourcePath + ": " + exception.getMessage());
+        }
+        return false;
     }
 
     private void loadCustomConfigs() {

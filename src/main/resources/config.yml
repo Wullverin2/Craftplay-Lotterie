@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 4
+config-version: 5
 
 settings:
   # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.
@@ -487,6 +487,17 @@ docs:
   generate-placeholder-docs: true
 
 notifications:
+  player-preferences:
+    # DE: Standardwert für persönliche Benachrichtigungen, solange Spieler nichts anderes gesetzt haben.
+    # EN: Default value for personal notifications until players choose another setting.
+    default-enabled: true
+  pot-threshold:
+    # DE: Aktiviert eine einmalige Nachricht pro Runde, sobald der Topf einen Betrag erreicht.
+    # EN: Enables a once-per-round message when the pot reaches a configured amount.
+    enabled: false
+    # DE: Topf-Betrag, ab dem die Pot-Reminder-Nachricht gesendet wird.
+    # EN: Pot amount from which the pot reminder message is sent.
+    amount: 10000.0
   join-reminder:
     # DE: Sendet Spielern beim Join einen Lotterie-Hinweis.
     # EN: Sends players a lottery reminder when they join.
@@ -598,6 +609,9 @@ announcements:
     # DE: Aktiviert regelmäßige Chat-Ankündigungen der nächsten Ziehung.
     # EN: Enables recurring chat announcements for the next draw.
     enabled: true
+    # DE: Sendet bei mehreren Lotterie-Profilen je Profil eine eigene Ankündigung.
+    # EN: Sends one announcement per lottery profile when multiple profiles are enabled.
+    per-profile-enabled: true
     # DE: Abstand zwischen Ankündigungen in Minuten.
     # EN: Interval between announcements in minutes.
     interval-minutes: 30

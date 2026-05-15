@@ -81,6 +81,9 @@ public final class LotteryManager {
     private final Map<UUID, DailyUsage> dailyUsage = new HashMap<>();
     private final Map<UUID, Map<String, Long>> freeTicketClaims = new HashMap<>();
     private final Map<UUID, Integer> seasonPoints = new HashMap<>();
+    private final Map<UUID, String> playerLotterySelections = new HashMap<>();
+    private final Map<UUID, Map<String, Boolean>> notificationPreferences = new HashMap<>();
+    private final Map<String, Boolean> potReminderSent = new HashMap<>();
     private final Map<UUID, Long> purchaseCooldowns = new HashMap<>();
     private final List<PendingPayment> pendingPayments = new ArrayList<>();
     private final Random random = new Random();
@@ -143,6 +146,8 @@ public final class LotteryManager {
         loadDailyUsage();
         loadFreeTicketClaims();
         loadSeasonPoints();
+        loadPlayerLotterySelections();
+        loadNotificationPreferences();
         loadPendingNotifications();
         loadPendingPayments();
         loadMetaStats();
@@ -236,7 +241,21 @@ public final class LotteryManager {
         }
     }
 
+    private <T> T withPlayerLotteryContext(Player player, java.util.function.Supplier<T> supplier) {
+        if (player == null || operationLotteryId != null) {
+            return supplier.get();
+        }
+        return withLotteryContext(getSelectedLotteryId(player), supplier);
+    }
+
     public void showStatus(CommandSender sender) {
+        if (sender instanceof Player player && operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                showStatus(sender);
+                return null;
+            });
+            return;
+        }
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.status", createCommonPlaceholders(sender instanceof Player player ? player : null));
         if (sender instanceof Player player) {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.your-tickets", createCommonPlaceholders(player));
@@ -245,6 +264,13 @@ public final class LotteryManager {
     }
 
     public void showWinners(CommandSender sender) {
+        if (sender instanceof Player player && operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                showWinners(sender);
+                return null;
+            });
+            return;
+        }
         if (winnerHistory().isEmpty()) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-winners");
             return;
@@ -264,10 +290,24 @@ public final class LotteryManager {
     }
 
     public void showStats(CommandSender sender) {
+        if (sender instanceof Player player && operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                showStats(sender);
+                return null;
+            });
+            return;
+        }
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.stats", createCommonPlaceholders(sender instanceof Player player ? player : null));
     }
 
     public void showNextDraw(CommandSender sender) {
+        if (sender instanceof Player player && operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                showNextDraw(sender);
+                return null;
+            });
+            return;
+        }
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.next-draw", createCommonPlaceholders(sender instanceof Player player ? player : null));
     }
 
@@ -495,6 +535,8 @@ public final class LotteryManager {
             loadDailyUsage();
             loadFreeTicketClaims();
             loadSeasonPoints();
+            loadPlayerLotterySelections();
+            loadNotificationPreferences();
             loadPendingNotifications();
             loadPendingPayments();
             loadMetaStats();
@@ -575,6 +617,18 @@ public final class LotteryManager {
             .toList();
     }
 
+    public List<String> getSelectableLotteryProfileIds(Player player) {
+        return getLotteryProfileIds().stream()
+            .filter(id -> plugin.getLotteriesConfig().getBoolean("profiles." + id + ".enabled", true))
+            .filter(id -> canUseLotteryProfile(player, id))
+            .toList();
+    }
+
+    private boolean canUseLotteryProfile(Player player, String id) {
+        String permission = plugin.getLotteriesConfig().getString("profiles." + id + ".permission", "");
+        return permission == null || permission.isBlank() || player.hasPermission(permission);
+    }
+
     public void setActiveLottery(CommandSender sender, String requestedId) {
         String normalizedId = requestedId.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
         String path = "profiles." + normalizedId;
@@ -594,6 +648,54 @@ public final class LotteryManager {
             "id", normalizedId,
             "name", getActiveLotteryDisplayName()
         ));
+    }
+
+    public void setPlayerLottery(Player player, String requestedId, boolean openMenuAfterSelect) {
+        String normalizedId = normalizeLotteryId(requestedId);
+        String path = "profiles." + normalizedId;
+        if (!areLotteryProfilesEnabled() || !plugin.getLotteriesConfig().isConfigurationSection(path)) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.lotteries-not-found", Map.of("id", requestedId));
+            return;
+        }
+        if (!plugin.getLotteriesConfig().getBoolean(path + ".enabled", true)) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.lotteries-disabled", Map.of("id", normalizedId));
+            return;
+        }
+        if (!canUseLotteryProfile(player, normalizedId)) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.no-permission");
+            return;
+        }
+
+        playerLotterySelections.put(player.getUniqueId(), normalizedId);
+        save();
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.profile-selected", Map.of(
+            "id", normalizedId,
+            "name", getLotteryDisplayName(normalizedId)
+        ));
+        if (openMenuAfterSelect) {
+            withPlayerLotteryContext(player, () -> {
+                openMenu(player);
+                return null;
+            });
+        }
+    }
+
+    public void listPlayerLotteries(Player player) {
+        if (!areLotteryProfilesEnabled()) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.profiles-disabled");
+            return;
+        }
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.profile-list-header", Map.of(
+            "selected", getSelectedLotteryId(player)
+        ));
+        for (String id : getSelectableLotteryProfileIds(player)) {
+            Component entry = legacy(MessageUtil.raw(player, plugin.getMessagesConfig(player), "messages.profile-list-entry", Map.of(
+                "id", id,
+                "name", getLotteryDisplayName(id),
+                "selected", id.equalsIgnoreCase(getSelectedLotteryId(player)) ? "*" : ""
+            ))).clickEvent(ClickEvent.runCommand("/lottery profile " + id));
+            player.sendMessage(entry);
+        }
     }
 
     public void listAdminLog(CommandSender sender, int requestedPage) {
@@ -798,10 +900,18 @@ public final class LotteryManager {
         doctorLine(sender, "Vault", Bukkit.getPluginManager().isPluginEnabled("Vault"), "Vault Economy Provider");
         doctorLine(sender, "Ticketpreis", getTicketPrice() > 0.0D, economyService.format(getTicketPrice()));
         doctorLine(sender, "GUI Größe", plugin.getGuiConfig().getInt("gui.size", 27) % 9 == 0, String.valueOf(plugin.getGuiConfig().getInt("gui.size", 27)));
+        int invalidMaterials = countInvalidGuiMaterials();
+        doctorLine(sender, "GUI Materialien", invalidMaterials == 0, invalidMaterials + " ungültig");
+        int duplicateSlots = countDuplicateGuiSlots();
+        doctorLine(sender, "GUI Slots", duplicateSlots == 0, duplicateSlots + " doppelt");
         doctorLine(sender, "Mindestspieler", getMinimumPlayers() >= 0, String.valueOf(getMinimumPlayers()));
         doctorLine(sender, "Storage", !databaseStorage.getStatus().startsWith("unknown") && !databaseStorage.getStatus().contains("failed"), databaseStorage.getStatus());
         doctorLine(sender, "Gewinnanteile", getPrizeShares().stream().mapToDouble(Double::doubleValue).sum() > 0.0D, getPrizeShares().toString());
         doctorLine(sender, "HeadDatabase", !plugin.getGuiConfig().saveToString().contains("head-database-id") || Bukkit.getPluginManager().isPluginEnabled("HeadDatabase"), "optional");
+        doctorLine(sender, "LuckPerms", !plugin.getConfig().getBoolean("eligibility.groups.enabled", false) || Bukkit.getPluginManager().isPluginEnabled("LuckPerms"), "optional für Gruppenchecks");
+        doctorLine(sender, "Lotterie-Profile", !areLotteryProfilesEnabled() || !getLotteryProfileIds().isEmpty(), getLotteryProfileIds().size() + " Profil(e)");
+        int invalidHolograms = countInvalidHologramLocations();
+        doctorLine(sender, "Hologramme", invalidHolograms == 0, invalidHolograms + " ungültige Orte");
         appendLog("doctor", Map.of("sender", sender.getName()));
     }
 
@@ -810,6 +920,81 @@ public final class LotteryManager {
             "check", check,
             "detail", detail
         ));
+    }
+
+    private int countInvalidGuiMaterials() {
+        int invalid = 0;
+        for (String root : getGuiRootsWithItems()) {
+            ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection(root + ".items");
+            if (itemsSection == null) {
+                continue;
+            }
+            for (String key : itemsSection.getKeys(false)) {
+                String material = plugin.getGuiConfig().getString(root + ".items." + key + ".material", "");
+                if (material == null || material.isBlank() || isSpecialHeadMaterial(material)) {
+                    continue;
+                }
+                if (Material.matchMaterial(material.toUpperCase(Locale.ROOT)) == null) {
+                    invalid++;
+                }
+            }
+        }
+        return invalid;
+    }
+
+    private int countDuplicateGuiSlots() {
+        int duplicates = 0;
+        for (String root : getGuiRootsWithItems()) {
+            ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection(root + ".items");
+            if (itemsSection == null) {
+                continue;
+            }
+            Map<Integer, String> slots = new HashMap<>();
+            for (String key : itemsSection.getKeys(false)) {
+                int slot = plugin.getGuiConfig().getInt(root + ".items." + key + ".slot", -1);
+                if (slot < 0) {
+                    continue;
+                }
+                if (slots.putIfAbsent(slot, key) != null) {
+                    duplicates++;
+                }
+            }
+        }
+        return duplicates;
+    }
+
+    private List<String> getGuiRootsWithItems() {
+        List<String> roots = new ArrayList<>();
+        for (String key : plugin.getGuiConfig().getKeys(false)) {
+            if (plugin.getGuiConfig().isConfigurationSection(key + ".items")) {
+                roots.add(key);
+            }
+        }
+        return roots;
+    }
+
+    private boolean isSpecialHeadMaterial(String material) {
+        String normalized = material.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("hdb:")
+            || normalized.startsWith("headdatabase:")
+            || normalized.startsWith("playerhead:")
+            || normalized.startsWith("player_head:");
+    }
+
+    private int countInvalidHologramLocations() {
+        ConfigurationSection section = plugin.getHologramsConfig().getConfigurationSection("holograms");
+        if (section == null) {
+            return 0;
+        }
+
+        int invalid = 0;
+        for (String id : section.getKeys(false)) {
+            String world = section.getString(id + ".location.world", "");
+            if (world == null || world.isBlank() || Bukkit.getWorld(world) == null) {
+                invalid++;
+            }
+        }
+        return invalid;
     }
 
     public void resetSeason(CommandSender sender, String requestedSeasonId) {
@@ -833,6 +1018,10 @@ public final class LotteryManager {
     }
 
     public PurchaseResult buyTickets(Player player, int amount) {
+        if (operationLotteryId == null) {
+            return withPlayerLotteryContext(player, () -> buyTickets(player, amount));
+        }
+
         if (amount <= 0) {
             return new PurchaseResult(false, "messages.invalid-amount", Map.of());
         }
@@ -921,10 +1110,15 @@ public final class LotteryManager {
             broadcastConfigured("messages.ticket-purchase-broadcast", placeholders, player);
         }
         sendWebhookEvent("ticket-purchase", placeholders);
+        maybeSendPotReminder(placeholders);
         return new PurchaseResult(true, itemLottery ? "messages.buy-success-items" : "messages.buy-success", placeholders);
     }
 
     public PurchaseResult claimFreeTickets(Player player, String requestedReason) {
+        if (operationLotteryId == null) {
+            return withPlayerLotteryContext(player, () -> claimFreeTickets(player, requestedReason));
+        }
+
         if (!plugin.getConfig().getBoolean("free-tickets.enabled", false)) {
             return new PurchaseResult(false, "messages.free-tickets-disabled", Map.of());
         }
@@ -997,6 +1191,62 @@ public final class LotteryManager {
         placeholders.put("amount", String.valueOf(amount));
         placeholders.put("reason", reason);
         return new PurchaseResult(true, "messages.free-tickets-success", placeholders);
+    }
+
+    public void grantFreeTickets(CommandSender sender, OfflinePlayer target, String requestedReason, int requestedAmount) {
+        int amount = Math.max(1, requestedAmount);
+        UUID playerId = target.getUniqueId();
+        Player onlinePlayer = Bukkit.getPlayer(playerId);
+        String lotteryId = onlinePlayer != null
+            ? getSelectedLotteryId(onlinePlayer)
+            : playerLotterySelections.getOrDefault(playerId, getActiveLotteryId());
+
+        withLotteryContext(lotteryId, () -> {
+            int maxPerPlayer = plugin.getConfig().getInt("settings.tickets-per-player-max", 256);
+            int currentTickets = getTicketsFor(playerId);
+            if (maxPerPlayer > 0 && currentTickets + amount > maxPerPlayer) {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-limit-reached", Map.of(
+                    "max", String.valueOf(maxPerPlayer),
+                    "tickets", String.valueOf(currentTickets)
+                ));
+                return null;
+            }
+
+            String reason = normalizeConfigKey(requestedReason == null || requestedReason.isBlank() ? "admin" : requestedReason);
+            String playerName = target.getName() != null ? target.getName() : playerId.toString();
+            String reasonPath = "free-tickets.reasons." + reason + ".money-pot-per-ticket";
+            double potAdd = plugin.getConfig().getDouble(reasonPath, 0.0D) * amount;
+            currentRound().addTickets(playerId, amount, potAdd, 0.0D);
+            getOrCreateStats(playerId, playerName).recordPurchase(playerName, amount, 0.0D, LocalDateTime.now(getZoneId()));
+            getOrCreateSeasonStats(playerId, playerName).recordPurchase(playerName, amount, 0.0D, LocalDateTime.now(getZoneId()));
+            addSeasonPoints(playerId, playerName, plugin.getConfig().getInt("season-shop.points.free-ticket-claim", 0));
+            appendTransaction("free_ticket_grant", playerName, 0.0D, Map.of(
+                "tickets", String.valueOf(amount),
+                "reason", reason,
+                "lottery", getActiveLotteryId(),
+                "sender", sender.getName()
+            ));
+            appendLog("free_ticket_grant", Map.of(
+                "player", playerName,
+                "amount", String.valueOf(amount),
+                "reason", reason,
+                "sender", sender.getName()
+            ));
+
+            Map<String, String> placeholders = new HashMap<>(createCommonPlaceholders(onlinePlayer));
+            placeholders.put("player", playerName);
+            placeholders.put("amount", String.valueOf(amount));
+            placeholders.put("reason", reason);
+            placeholders.put("lottery", getActiveLotteryDisplayName());
+            if (onlinePlayer != null) {
+                MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.free-tickets-grant-received", placeholders);
+            } else {
+                queuePendingNotification(playerId, "messages.free-tickets-grant-received", placeholders);
+            }
+            save();
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.free-tickets-granted", placeholders);
+            return null;
+        });
     }
 
     public void showSeasonShop(CommandSender sender) {
@@ -1090,6 +1340,64 @@ public final class LotteryManager {
             "amount", String.valueOf(amount),
             "cost", economyService.format(fullCost)
         ));
+    }
+
+    private void maybeSendPotReminder(Map<String, String> placeholders) {
+        if (!plugin.getConfig().getBoolean("notifications.pot-threshold.enabled", false)) {
+            return;
+        }
+
+        double threshold = plugin.getConfig().getDouble("notifications.pot-threshold.amount", 0.0D);
+        String lotteryId = getActiveLotteryId();
+        if (threshold <= 0.0D || getTotalPot() < threshold || potReminderSent.getOrDefault(lotteryId, false)) {
+            return;
+        }
+
+        potReminderSent.put(lotteryId, true);
+        Map<String, String> reminderPlaceholders = new HashMap<>(placeholders);
+        reminderPlaceholders.put("threshold", economyService.format(threshold));
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            if (isNotificationEnabled(onlinePlayer.getUniqueId(), "pot")) {
+                MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.pot-reminder", reminderPlaceholders);
+            }
+        }
+    }
+
+    private boolean isNotificationEnabled(UUID playerId, String type) {
+        boolean defaultEnabled = plugin.getConfig().getBoolean("notifications.player-preferences.default-enabled", true);
+        return notificationPreferences.getOrDefault(playerId, Map.of())
+            .getOrDefault(type.toLowerCase(Locale.ROOT), defaultEnabled);
+    }
+
+    public void setNotificationPreference(Player player, String type, boolean enabled) {
+        String normalizedType = normalizeNotificationType(type);
+        notificationPreferences.computeIfAbsent(player.getUniqueId(), ignored -> new HashMap<>()).put(normalizedType, enabled);
+        save();
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reminder-updated", Map.of(
+            "type", normalizedType,
+            "state", enabled ? "on" : "off"
+        ));
+    }
+
+    public void showNotificationPreferences(Player player) {
+        MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reminder-header");
+        for (String type : List.of("draw", "win", "refund", "pot")) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.reminder-entry", Map.of(
+                "type", type,
+                "state", isNotificationEnabled(player.getUniqueId(), type) ? "on" : "off"
+            ));
+        }
+    }
+
+    private String normalizeNotificationType(String type) {
+        String normalized = type == null ? "" : type.toLowerCase(Locale.ROOT).replace("-", "_");
+        return switch (normalized) {
+            case "draw", "ziehung" -> "draw";
+            case "win", "gewinn" -> "win";
+            case "refund", "rueckerstattung", "rückerstattung" -> "refund";
+            case "pot", "topf" -> "pot";
+            default -> "draw";
+        };
     }
 
     private void routeTicketTax(Player player, double taxAmount) {
@@ -1285,6 +1593,10 @@ public final class LotteryManager {
     }
 
     public Map<String, String> createCommonPlaceholders(Player player) {
+        if (player != null && operationLotteryId == null) {
+            return withPlayerLotteryContext(player, () -> createCommonPlaceholders(player));
+        }
+
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("jackpot", economyService.format(getTotalPot()));
         placeholders.put("pot", economyService.format(getTotalPot()));
@@ -1318,6 +1630,8 @@ public final class LotteryManager {
             placeholders.put("player", player.getName());
             placeholders.put("player_name", player.getName());
             placeholders.put("player_uuid", player.getUniqueId().toString());
+            placeholders.put("selected_lottery_id", getSelectedLotteryId(player));
+            placeholders.put("selected_lottery_name", getLotteryDisplayName(getSelectedLotteryId(player)));
             placeholders.put("tickets", String.valueOf(getTicketsFor(player.getUniqueId())));
             placeholders.put("player_tickets", String.valueOf(getTicketsFor(player.getUniqueId())));
             placeholders.put("chance", formatChance(getWinChance(player.getUniqueId())));
@@ -1329,6 +1643,8 @@ public final class LotteryManager {
             placeholders.put("player", "");
             placeholders.put("player_name", "");
             placeholders.put("player_uuid", "");
+            placeholders.put("selected_lottery_id", getActiveLotteryId());
+            placeholders.put("selected_lottery_name", getActiveLotteryDisplayName());
             placeholders.put("tickets", "0");
             placeholders.put("player_tickets", "0");
             placeholders.put("chance", "0.00%");
@@ -1400,6 +1716,7 @@ public final class LotteryManager {
 
     public void resetRound() {
         currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+        potReminderSent.remove(getActiveLotteryId());
         appendLog("reset_round", Map.of());
         save();
     }
@@ -1456,6 +1773,7 @@ public final class LotteryManager {
         plugin.getHologramsConfig().set(path + ".type", normalizedType);
         String normalizedStatistic = normalizeStatisticKey(statistic);
         plugin.getHologramsConfig().set(path + ".statistic", normalizedStatistic);
+        plugin.getHologramsConfig().set(path + ".lottery", getActiveLotteryId());
         setHologramLocation(path + ".location", player.getLocation());
         plugin.saveHologramsConfig();
         updateHolograms();
@@ -1580,6 +1898,14 @@ public final class LotteryManager {
     }
 
     public void openMenu(Player player) {
+        if (operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                openMenu(player);
+                return null;
+            });
+            return;
+        }
+
         if (!plugin.getGuiConfig().getBoolean("gui.enabled", true)) {
             showStatus(player);
             return;
@@ -1609,7 +1935,10 @@ public final class LotteryManager {
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")))
-            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")));
+            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")))
+            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")))
+            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("editor-gui.title", "&dGUI Editor")))
+            || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-overview-gui.title", "&cAdmin Übersicht")));
     }
 
     private String getMainGuiTitle() {
@@ -1621,11 +1950,35 @@ public final class LotteryManager {
     }
 
     public void handleMenuClick(Player player, String title, int slot) {
+        if (operationLotteryId == null) {
+            withPlayerLotteryContext(player, () -> {
+                handleMenuClick(player, title, slot);
+                return null;
+            });
+            return;
+        }
+
         boolean statsPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")));
         boolean personalStatsPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")));
         boolean languagePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")));
         boolean adminPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")));
-        String itemRoot = statsPage ? "stats-gui.items" : personalStatsPage ? "personal-stats-gui.items" : languagePage ? "language-gui.items" : adminPage ? "admin-gui.items" : "gui.items";
+        boolean profilePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")));
+        boolean editorPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("editor-gui.title", "&dGUI Editor")));
+        boolean adminOverviewPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-overview-gui.title", "&cAdmin Übersicht")));
+        if (profilePage) {
+            handleProfileMenuClick(player, slot);
+            return;
+        }
+        if (editorPage) {
+            handleEditorMenuClick(player, slot);
+            return;
+        }
+        if (adminOverviewPage) {
+            handleAdminOverviewClick(player, slot);
+            return;
+        }
+        String itemRoot = statsPage ? "stats-gui.items" : personalStatsPage ? "personal-stats-gui.items" : languagePage ? "language-gui.items"
+            : adminPage ? "admin-gui.items" : "gui.items";
         String itemPath = findItemPathBySlot(player, itemRoot, slot);
         if (itemPath == null) {
             return;
@@ -1641,6 +1994,12 @@ public final class LotteryManager {
                 openLanguageMenu(player);
             } else if (adminPage) {
                 openAdminMenu(player);
+            } else if (profilePage) {
+                openProfileMenu(player);
+            } else if (editorPage) {
+                openGuiEditorMenu(player);
+            } else if (adminOverviewPage) {
+                openAdminOverviewMenu(player);
             } else {
                 openMenu(player);
             }
@@ -1742,6 +2101,244 @@ public final class LotteryManager {
         player.openInventory(inventory);
     }
 
+    public void openProfileMenu(Player player) {
+        if (!areLotteryProfilesEnabled()) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.profiles-disabled");
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("profile-gui.size", 54),
+            MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")));
+        ItemStack filler = createItem(parseMaterial(plugin.getGuiConfig().getString("profile-gui.filler-material", "BLACK_STAINED_GLASS_PANE"),
+            Material.BLACK_STAINED_GLASS_PANE), "&0");
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            inventory.setItem(slot, filler);
+        }
+
+        List<String> profiles = getSelectableLotteryProfileIds(player);
+        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
+        for (int index = 0; index < profiles.size() && index < slots.length; index++) {
+            String id = profiles.get(index);
+            boolean selected = id.equalsIgnoreCase(getSelectedLotteryId(player));
+            ItemStack item = createItem(selected ? Material.EMERALD_BLOCK : Material.CHEST,
+                (selected ? "&a" : "&e") + getLotteryDisplayName(id),
+                "&7ID: &f" + id,
+                "&7Topf: &f" + withLotteryContext(id, () -> economyService.format(getTotalPot())),
+                "&7Tickets: &f" + withLotteryContext(id, () -> String.valueOf(currentRound().getTotalTickets())),
+                selected ? "&aAktuell ausgewählt" : "&aKlicken zum Auswählen");
+            inventory.setItem(slots[index], item);
+        }
+
+        inventory.setItem(49, createItem(Material.ARROW, "&aZurück", "&7Zurück zur Lotterie."));
+        player.openInventory(inventory);
+    }
+
+    private void handleProfileMenuClick(Player player, int slot) {
+        if (slot == 49) {
+            openMenu(player);
+            return;
+        }
+
+        List<String> profiles = getSelectableLotteryProfileIds(player);
+        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
+        for (int index = 0; index < profiles.size() && index < slots.length; index++) {
+            if (slots[index] == slot) {
+                setPlayerLottery(player, profiles.get(index), true);
+                return;
+            }
+        }
+    }
+
+    public void openGuiEditorMenu(Player player) {
+        if (!player.hasPermission("lottery.admin")) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.no-permission");
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("editor-gui.size", 27),
+            MessageUtil.color(plugin.getGuiConfig().getString("editor-gui.title", "&dGUI Editor")));
+        ItemStack filler = createItem(Material.GRAY_STAINED_GLASS_PANE, "&0");
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            inventory.setItem(slot, filler);
+        }
+        inventory.setItem(10, createItem(Material.CHEST, "&eHauptmenü", "&7Klick: Items auflisten", "&7Befehl: /lottery editor set gui <item> <feld> <wert>"));
+        inventory.setItem(11, createItem(Material.BOOK, "&eStatistik-Menü", "&7Klick: Items auflisten", "&7Root: stats-gui"));
+        inventory.setItem(12, createItem(Material.PLAYER_HEAD, "&ePersönliche Statistik", "&7Klick: Items auflisten", "&7Root: personal-stats-gui"));
+        inventory.setItem(13, createItem(Material.WRITABLE_BOOK, "&eSprachmenü", "&7Klick: Items auflisten", "&7Root: language-gui"));
+        inventory.setItem(14, createItem(Material.COMMAND_BLOCK, "&cAdmin-Menü", "&7Klick: Items auflisten", "&7Root: admin-gui"));
+        inventory.setItem(16, createItem(Material.ANVIL, "&aConfig-Update", "&7Fügt fehlende Default-Keys ein.", "&aKlicken zum Ausführen"));
+        inventory.setItem(22, createItem(Material.ARROW, "&aZurück", "&7Zurück zum Admin-Menü."));
+        player.openInventory(inventory);
+    }
+
+    private void handleEditorMenuClick(Player player, int slot) {
+        switch (slot) {
+            case 10 -> listGuiEditorItems(player, "gui");
+            case 11 -> listGuiEditorItems(player, "stats-gui");
+            case 12 -> listGuiEditorItems(player, "personal-stats-gui");
+            case 13 -> listGuiEditorItems(player, "language-gui");
+            case 14 -> listGuiEditorItems(player, "admin-gui");
+            case 16 -> updateConfigFiles(player);
+            case 22 -> openAdminMenu(player);
+            default -> {
+            }
+        }
+    }
+
+    public void openAdminOverviewMenu(Player player) {
+        if (!player.hasPermission("lottery.admin")) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.no-permission");
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("admin-overview-gui.size", 27),
+            MessageUtil.color(plugin.getGuiConfig().getString("admin-overview-gui.title", "&cAdmin Übersicht")));
+        ItemStack filler = createItem(Material.RED_STAINED_GLASS_PANE, "&0");
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            inventory.setItem(slot, filler);
+        }
+        inventory.setItem(10, createItem(Material.CHEST, "&eAktive Runden", "&7Zeigt Tickets und Topf je Profil."));
+        inventory.setItem(12, createItem(Material.EMERALD, "&aTransaktionen", "&7Öffnet die Transaktionen im Chat."));
+        inventory.setItem(14, createItem(Material.BOOK, "&eAdmin-Log", "&7Öffnet das Admin-Log im Chat."));
+        inventory.setItem(16, createItem(Material.PAPER, "&bOffene Zahlungen", "&7Zeigt ausstehende Zahlungen."));
+        inventory.setItem(22, createItem(Material.ARROW, "&aZurück", "&7Zurück zum Admin-Menü."));
+        player.openInventory(inventory);
+    }
+
+    private void handleAdminOverviewClick(Player player, int slot) {
+        switch (slot) {
+            case 10 -> showActiveRounds(player);
+            case 12 -> listTransactions(player, 1);
+            case 14 -> listAdminLog(player, 1);
+            case 16 -> listPendingPaymentOverview(player);
+            case 22 -> openAdminMenu(player);
+            default -> {
+            }
+        }
+    }
+
+    public void listGuiEditorItems(CommandSender sender, String menu) {
+        String root = normalizeGuiRoot(menu);
+        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection(root + ".items");
+        if (itemsSection == null || itemsSection.getKeys(false).isEmpty()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-empty", Map.of("menu", root));
+            return;
+        }
+
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-header", Map.of("menu", root));
+        for (String key : itemsSection.getKeys(false).stream().sorted().toList()) {
+            String path = root + ".items." + key;
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-entry", Map.of(
+                "item", key,
+                "slot", String.valueOf(plugin.getGuiConfig().getInt(path + ".slot", -1)),
+                "material", plugin.getGuiConfig().getString(path + ".material", "-"),
+                "name", plugin.getGuiConfig().getString(path + ".name", "")
+            ));
+        }
+    }
+
+    public void editGuiItem(CommandSender sender, String menu, String item, String field, String value) {
+        if (!sender.hasPermission("lottery.admin")) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+            return;
+        }
+
+        String root = normalizeGuiRoot(menu);
+        String itemKey = normalizeConfigKey(item);
+        String path = root + ".items." + itemKey;
+        if (!plugin.getGuiConfig().isConfigurationSection(path)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-item-missing", Map.of(
+                "menu", root,
+                "item", itemKey
+            ));
+            return;
+        }
+
+        String normalizedField = field.toLowerCase(Locale.ROOT).replace("-", "_");
+        switch (normalizedField) {
+            case "slot" -> plugin.getGuiConfig().set(path + ".slot", parsePositiveInt(value, 0));
+            case "material" -> plugin.getGuiConfig().set(path + ".material", value.toUpperCase(Locale.ROOT));
+            case "name" -> plugin.getGuiConfig().set(path + ".name", value);
+            case "permission", "view_permission" -> plugin.getGuiConfig().set(path + ".permission", value);
+            case "hide_without_permission" -> plugin.getGuiConfig().set(path + ".hide-without-permission", Boolean.parseBoolean(value));
+            case "lore" -> plugin.getGuiConfig().set(path + ".lore", List.of(value.split("\\|", -1)));
+            case "actions" -> plugin.getGuiConfig().set(path + ".actions", List.of(value.split("\\|", -1)));
+            case "add_action" -> {
+                List<String> actions = new ArrayList<>(plugin.getGuiConfig().getStringList(path + ".actions"));
+                actions.add(value);
+                plugin.getGuiConfig().set(path + ".actions", actions);
+            }
+            case "buy_amount" -> plugin.getGuiConfig().set(path + ".buy-amount", parsePositiveInt(value, 1));
+            default -> {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-field-invalid");
+                return;
+            }
+        }
+
+        plugin.saveGuiConfig();
+        appendLog("gui_editor_update", Map.of("menu", root, "item", itemKey, "field", normalizedField, "sender", sender.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.editor-updated", Map.of(
+            "menu", root,
+            "item", itemKey,
+            "field", normalizedField
+        ));
+    }
+
+    public void updateConfigFiles(CommandSender sender) {
+        int updated = plugin.updateConfigDefaults();
+        reload();
+        appendLog("config_update", Map.of("updated", String.valueOf(updated), "sender", sender.getName()));
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.config-update-success", Map.of(
+            "files", String.valueOf(updated)
+        ));
+    }
+
+    private String normalizeGuiRoot(String menu) {
+        String normalized = menu.toLowerCase(Locale.ROOT).replace("_", "-");
+        return switch (normalized) {
+            case "main", "gui" -> "gui";
+            case "stats", "statistik" -> "stats-gui";
+            case "personal", "personal-stats" -> "personal-stats-gui";
+            case "language", "sprache" -> "language-gui";
+            case "admin" -> "admin-gui";
+            default -> normalized.endsWith("-gui") ? normalized : "gui";
+        };
+    }
+
+    public void showActiveRounds(CommandSender sender) {
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rounds-header");
+        for (String lotteryId : getScheduledLotteryIds()) {
+            withLotteryContext(lotteryId, () -> {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rounds-entry", Map.of(
+                    "id", lotteryId,
+                    "name", getActiveLotteryDisplayName(),
+                    "tickets", String.valueOf(currentRound().getTotalTickets()),
+                    "players", String.valueOf(currentRound().getUniquePlayers()),
+                    "pot", economyService.format(getTotalPot()),
+                    "next_draw", formatNextDraw()
+                ));
+                return null;
+            });
+        }
+    }
+
+    public void listPendingPaymentOverview(CommandSender sender) {
+        if (pendingPayments.isEmpty()) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.payments-empty");
+            return;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.payments-header", Map.of(
+            "amount", String.valueOf(pendingPayments.size())
+        ));
+        pendingPayments.stream().limit(10).forEach(payment -> MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.payments-entry", Map.of(
+            "id", payment.id(),
+            "player", getCachedPlayerName(payment.playerId()),
+            "amount", economyService.format(payment.amount()),
+            "reason", payment.reason(),
+            "attempts", String.valueOf(payment.attempts())
+        )));
+    }
+
     public String resolvePlaceholder(OfflinePlayer player, String params) {
         String normalizedParams = params.toLowerCase(Locale.ROOT);
         String topValue = resolveTopPlaceholder(normalizedParams);
@@ -1757,6 +2354,8 @@ public final class LotteryManager {
             case "ticket_price" -> economyService.format(getTicketPrice());
             case "lottery_id" -> getActiveLotteryId();
             case "lottery_name" -> getActiveLotteryDisplayName();
+            case "selected_lottery_id" -> player instanceof Player onlinePlayer ? getSelectedLotteryId(onlinePlayer) : getActiveLotteryId();
+            case "selected_lottery_name" -> player instanceof Player onlinePlayer ? getLotteryDisplayName(getSelectedLotteryId(onlinePlayer)) : getActiveLotteryDisplayName();
             case "lottery_type" -> getLotteryType();
             case "draw_time" -> TimeUtil.formatLocalTime(getNextDrawAt().toLocalTime());
             case "draw_times" -> formatDrawTimes();
@@ -2034,6 +2633,19 @@ public final class LotteryManager {
     }
 
     private void broadcastDrawAnnouncement() {
+        if (areLotteryProfilesEnabled() && plugin.getConfig().getBoolean("announcements.draw.per-profile-enabled", true)) {
+            for (String lotteryId : getScheduledLotteryIds()) {
+                withLotteryContext(lotteryId, () -> {
+                    broadcastDrawAnnouncementForCurrentLottery();
+                    return null;
+                });
+            }
+            return;
+        }
+        broadcastDrawAnnouncementForCurrentLottery();
+    }
+
+    private void broadcastDrawAnnouncementForCurrentLottery() {
         Map<String, String> placeholders = createCommonPlaceholders(null);
         Bukkit.getConsoleSender().sendMessage(MessageUtil.prefixed(plugin.getMessagesConfig(), "messages.draw-announcement", placeholders));
 
@@ -2045,8 +2657,12 @@ public final class LotteryManager {
         if (!command.startsWith("/")) {
             command = "/" + command;
         }
+        command = MessageUtil.format(null, command, placeholders);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!isNotificationEnabled(player.getUniqueId(), "draw")) {
+                continue;
+            }
             Component message = legacy(MessageUtil.prefixed(player, plugin.getMessagesConfig(player), "messages.draw-announcement", placeholders));
             if (buttonEnabled) {
                 String buttonText = plugin.getConfig().getString("announcements.draw.buy-button.text");
@@ -2093,7 +2709,9 @@ public final class LotteryManager {
             hologram.teleport(location);
         }
 
-        hologram.setText(MessageUtil.format(null, buildHologramText(path), createCommonPlaceholders(null)));
+        String lotteryId = plugin.getHologramsConfig().getString(path + ".lottery", getActiveLotteryId());
+        hologram.setText(withLotteryContext(lotteryId, () ->
+            MessageUtil.format(null, buildHologramText(path), createCommonPlaceholders(null))));
     }
 
     private String buildHologramText(String path) {
@@ -2207,6 +2825,7 @@ public final class LotteryManager {
 
         if (currentRound().getTotalTickets() <= 0) {
             currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+            potReminderSent.remove(getActiveLotteryId());
             setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
@@ -2227,6 +2846,7 @@ public final class LotteryManager {
         if (currentRound().getUniquePlayers() < getMinimumPlayers()) {
             RefundSummary refundSummary = shouldRefundOnNotEnoughPlayers() ? refundCurrentRoundTickets() : RefundSummary.empty();
             currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+            potReminderSent.remove(getActiveLotteryId());
             setLastDrawKey(drawKey);
             save();
             Map<String, String> placeholders = createCommonPlaceholders(null);
@@ -2297,7 +2917,7 @@ public final class LotteryManager {
             payoutPlaceholders.put("payout_state", payoutSuccess ? "success" : "failed");
             if (!payoutSuccess) {
                 queuePendingPayment(payout.playerId(), payout.amount(), "winner", payoutPlaceholders, "messages.winner-offline-notification");
-            } else if (Bukkit.getPlayer(payout.playerId()) == null) {
+            } else if (Bukkit.getPlayer(payout.playerId()) == null && isNotificationEnabled(payout.playerId(), "win")) {
                 queuePendingNotification(payout.playerId(), "messages.winner-offline-notification", payoutPlaceholders);
             }
             executeWinCommands(payoutPlaceholders);
@@ -2310,6 +2930,7 @@ public final class LotteryManager {
             ));
         }
         currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
+        potReminderSent.remove(getActiveLotteryId());
         save();
         appendLog("draw_winner", placeholders);
         runAutoBackupAfterDraw();
@@ -2507,12 +3128,12 @@ public final class LotteryManager {
                     "lottery", getActiveLotteryId()
                 ));
                 Player onlinePlayer = Bukkit.getPlayer(entry.getKey());
-                if (onlinePlayer != null) {
+                if (onlinePlayer != null && isNotificationEnabled(entry.getKey(), "refund")) {
                     MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.draw-refund", Map.of(
                         "amount", economyService.format(amount),
                         "tickets", String.valueOf(tickets)
                     ));
-                } else {
+                } else if (onlinePlayer == null && isNotificationEnabled(entry.getKey(), "refund")) {
                     queuePendingNotification(entry.getKey(), "messages.draw-refund-offline", Map.of(
                         "amount", economyService.format(amount),
                         "tickets", String.valueOf(tickets)
@@ -2560,9 +3181,9 @@ public final class LotteryManager {
             "item", getItemLotteryStakeMaterial().name()
         );
         Player onlinePlayer = Bukkit.getPlayer(playerId);
-        if (onlinePlayer != null) {
+        if (onlinePlayer != null && isNotificationEnabled(playerId, "refund")) {
             MessageUtil.send(onlinePlayer, plugin.getMessagesConfig(onlinePlayer), "messages.draw-refund-items", placeholders);
-        } else {
+        } else if (onlinePlayer == null && isNotificationEnabled(playerId, "refund")) {
             queuePendingNotification(playerId, "messages.draw-refund-items-offline", placeholders);
         }
     }
@@ -3208,6 +3829,47 @@ public final class LotteryManager {
         }
     }
 
+    private void loadPlayerLotterySelections() {
+        playerLotterySelections.clear();
+        ConfigurationSection selectionsSection = dataConfig.getConfigurationSection("player-lotteries");
+        if (selectionsSection == null) {
+            return;
+        }
+
+        for (String key : selectionsSection.getKeys(false)) {
+            try {
+                playerLotterySelections.put(UUID.fromString(key), normalizeLotteryId(selectionsSection.getString(key, "default")));
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning("Skipping invalid player lottery selection UUID in data.yml: " + key);
+            }
+        }
+    }
+
+    private void loadNotificationPreferences() {
+        notificationPreferences.clear();
+        ConfigurationSection preferencesSection = dataConfig.getConfigurationSection("notification-preferences");
+        if (preferencesSection == null) {
+            return;
+        }
+
+        for (String playerKey : preferencesSection.getKeys(false)) {
+            try {
+                UUID playerId = UUID.fromString(playerKey);
+                ConfigurationSection playerSection = preferencesSection.getConfigurationSection(playerKey);
+                if (playerSection == null) {
+                    continue;
+                }
+                Map<String, Boolean> preferences = new HashMap<>();
+                for (String type : playerSection.getKeys(false)) {
+                    preferences.put(type.toLowerCase(Locale.ROOT), playerSection.getBoolean(type, true));
+                }
+                notificationPreferences.put(playerId, preferences);
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning("Skipping invalid notification preference UUID in data.yml: " + playerKey);
+            }
+        }
+    }
+
     private void loadMetaStats() {
         totalTaxCollected = dataConfig.getDouble("meta.total-tax-collected", 0.0D);
         if (seasonId == null || seasonId.isBlank()) {
@@ -3405,6 +4067,18 @@ public final class LotteryManager {
             }
         }
 
+        dataConfig.set("player-lotteries", null);
+        for (Map.Entry<UUID, String> entry : playerLotterySelections.entrySet()) {
+            dataConfig.set("player-lotteries." + entry.getKey(), entry.getValue());
+        }
+
+        dataConfig.set("notification-preferences", null);
+        for (Map.Entry<UUID, Map<String, Boolean>> entry : notificationPreferences.entrySet()) {
+            for (Map.Entry<String, Boolean> preference : entry.getValue().entrySet()) {
+                dataConfig.set("notification-preferences." + entry.getKey() + "." + preference.getKey(), preference.getValue());
+            }
+        }
+
         dataConfig.set("meta.total-tax-collected", totalTaxCollected);
 
         dataConfig.set("pending-notifications", null);
@@ -3556,6 +4230,31 @@ public final class LotteryManager {
         return configured.toLowerCase(Locale.ROOT);
     }
 
+    private String getSelectedLotteryId(Player player) {
+        if (!areLotteryProfilesEnabled() || player == null) {
+            return "default";
+        }
+
+        String selected = playerLotterySelections.get(player.getUniqueId());
+        if (selected != null && isUsableLotteryProfile(player, selected)) {
+            return normalizeLotteryId(selected);
+        }
+
+        String active = getActiveLotteryId();
+        if (isUsableLotteryProfile(player, active)) {
+            return active;
+        }
+
+        return getSelectableLotteryProfileIds(player).stream().findFirst().orElse("default");
+    }
+
+    private boolean isUsableLotteryProfile(Player player, String id) {
+        String normalizedId = normalizeLotteryId(id);
+        return plugin.getLotteriesConfig().isConfigurationSection("profiles." + normalizedId)
+            && plugin.getLotteriesConfig().getBoolean("profiles." + normalizedId + ".enabled", true)
+            && canUseLotteryProfile(player, normalizedId);
+    }
+
     private String getLastDrawKey() {
         return lastDrawKeys.getOrDefault(getActiveLotteryId(), "");
     }
@@ -3570,7 +4269,12 @@ public final class LotteryManager {
 
     private String getActiveLotteryDisplayName() {
         String activeId = getActiveLotteryId();
-        return plugin.getLotteriesConfig().getString("profiles." + activeId + ".display-name", activeId);
+        return getLotteryDisplayName(activeId);
+    }
+
+    private String getLotteryDisplayName(String lotteryId) {
+        String id = normalizeLotteryId(lotteryId);
+        return plugin.getLotteriesConfig().getString("profiles." + id + ".display-name", id);
     }
 
     private String getActiveProfileString(String key, String fallback) {
@@ -3672,7 +4376,28 @@ public final class LotteryManager {
         String normalizedGroup = group.toLowerCase(Locale.ROOT);
         return player.hasPermission("group." + normalizedGroup)
             || player.hasPermission("luckperms.group." + normalizedGroup)
-            || player.hasPermission("cmi.rank." + normalizedGroup);
+            || player.hasPermission("cmi.rank." + normalizedGroup)
+            || hasLuckPermsGroup(player, normalizedGroup);
+    }
+
+    private boolean hasLuckPermsGroup(Player player, String normalizedGroup) {
+        if (!Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) {
+            return false;
+        }
+
+        try {
+            Class<?> providerClass = Class.forName("net.luckperms.api.LuckPermsProvider");
+            Object luckPerms = providerClass.getMethod("get").invoke(null);
+            Object userManager = luckPerms.getClass().getMethod("getUserManager").invoke(luckPerms);
+            Object user = userManager.getClass().getMethod("getUser", UUID.class).invoke(userManager, player.getUniqueId());
+            if (user == null) {
+                return false;
+            }
+            Object primaryGroup = user.getClass().getMethod("getPrimaryGroup").invoke(user);
+            return normalizedGroup.equals(String.valueOf(primaryGroup).toLowerCase(Locale.ROOT));
+        } catch (ReflectiveOperationException | LinkageError exception) {
+            return false;
+        }
     }
 
     private LocalTime getDrawTime() {
