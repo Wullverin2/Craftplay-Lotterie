@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 8
+config-version: 9
 
 update-checker:
   # DE: Aktiviert die Prüfung auf neue Plugin-Versionen über GitHub Releases.
@@ -499,6 +499,185 @@ season-shop:
       commands:
         - "eco give %player% 100"
 
+ticket-gifts:
+  # DE: Aktiviert /lottery gift <spieler> <anzahl>, damit Spieler anderen Tickets kaufen koennen.
+  # EN: Enables /lottery gift <player> <amount>, allowing players to buy tickets for others.
+  enabled: true
+  # DE: Maximale Anzahl Tickets pro Geschenk. 0 nutzt kein Extra-Limit.
+  # EN: Maximum tickets per gift. 0 means no extra limit.
+  max-per-gift: 64
+  # DE: Sendet eine Servernachricht, wenn ein Spieler Tickets verschenkt.
+  # EN: Broadcasts a server message when a player gifts tickets.
+  broadcast: true
+
+group-lottery:
+  # DE: Aktiviert /lottery group <name>, damit Freunde/Clans Gewinne teilen koennen.
+  # EN: Enables /lottery group <name>, allowing friends/clans to share winnings.
+  enabled: true
+  # DE: Teilt den Gewinn eines Gewinners auf teilnehmende Gruppenmitglieder derselben Runde auf.
+  # EN: Splits a winner's payout between participating group members of the same round.
+  share-winnings: true
+  # DE: Mindestanzahl teilnehmender Gruppenmitglieder, bevor ein Gewinn geteilt wird.
+  # EN: Minimum participating group members required before a payout is shared.
+  min-members-to-share: 2
+  # DE: Maximale Laenge eines Gruppennamens.
+  # EN: Maximum length of a group name.
+  max-name-length: 24
+
+lucky-number:
+  # DE: Spieler koennen mit /lottery lucky <zahl> eine Glueckszahl setzen.
+  # EN: Players can set a lucky number with /lottery lucky <number>.
+  enabled: true
+  # DE: Kleinste erlaubte Glueckszahl.
+  # EN: Smallest allowed lucky number.
+  min: 1
+  # DE: Groesste erlaubte Glueckszahl.
+  # EN: Largest allowed lucky number.
+  max: 99
+  # DE: Geldbonus, wenn die gesetzte Glueckszahl bei einer Ziehung getroffen wird.
+  # EN: Money bonus when a player's lucky number is hit during a draw.
+  bonus-money: 250.0
+  # DE: true bedeutet: Der Spieler braucht mindestens ein Ticket in der aktuellen Runde.
+  # EN: true means the player needs at least one ticket in the current round.
+  require-current-ticket: true
+  # DE: Verkuendet die gezogene Glueckszahl im Chat.
+  # EN: Announces the drawn lucky number in chat.
+  broadcast-drawn-number: true
+  # DE: Konsolenbefehle fuer Glueckszahl-Treffer. Platzhalter: %player%, %lucky_number%, %lucky_bonus%.
+  # EN: Console commands for lucky-number hits. Placeholders: %player%, %lucky_number%, %lucky_bonus%.
+  commands: []
+
+consolation-prizes:
+  # DE: Aktiviert Trostpreise fuer Teilnehmer ohne Hauptgewinn.
+  # EN: Enables consolation prizes for participants who did not win the main prize.
+  enabled: true
+  # DE: Geldbetrag pro Trostpreis. 0 deaktiviert nur die Geldzahlung, Befehle laufen weiter.
+  # EN: Money amount per consolation prize. 0 disables only the money payout, commands still run.
+  money: 0.0
+  # DE: Mindestanzahl Tickets, damit ein Spieler einen Trostpreis erhalten kann.
+  # EN: Minimum tickets required for a player to receive a consolation prize.
+  minimum-tickets: 1
+  # DE: Sendet Spielern eine Nachricht, wenn sie einen Trostpreis erhalten.
+  # EN: Sends players a message when they receive a consolation prize.
+  notify: true
+  # DE: Konsolenbefehle fuer Trostpreise. Platzhalter: %player%, %tickets%, %consolation_amount%.
+  # EN: Console commands for consolation prizes. Placeholders: %player%, %tickets%, %consolation_amount%.
+  commands: []
+
+pity-bonus:
+  # DE: Aktiviert einen Bonus nach mehreren verlorenen Teilnahmen in Folge.
+  # EN: Enables a bonus after several losing participations in a row.
+  enabled: true
+  # DE: Anzahl verlorener Runden in Folge, ab der der Bonus gezahlt wird.
+  # EN: Number of lost rounds in a row required before the bonus is paid.
+  losing-streak-threshold: 5
+  # DE: Geldbonus fuer die Pechserie. 0 deaktiviert nur die Geldzahlung.
+  # EN: Money bonus for the losing streak. 0 disables only the money payout.
+  money: 500.0
+  # DE: Setzt die Pechserie nach dem Bonus wieder auf 0.
+  # EN: Resets the losing streak to 0 after the bonus.
+  reset-streak-after-reward: true
+  # DE: Konsolenbefehle fuer den Pechserien-Bonus. Platzhalter: %player%, %losing_streak%, %pity_amount%.
+  # EN: Console commands for pity bonuses. Placeholders: %player%, %losing_streak%, %pity_amount%.
+  commands: []
+
+community-goals:
+  # DE: Aktiviert gemeinsame Ticketziele pro Runde, die den Topf boosten oder Befehle ausfuehren.
+  # EN: Enables shared per-round ticket goals that boost the pot or run commands.
+  enabled: true
+  goals:
+    starter:
+      # DE: Anzeigename des Community-Ziels.
+      # EN: Display name of the community goal.
+      name: "Community Starter"
+      # DE: Ab dieser Gesamtzahl gekaufter Tickets wird das Ziel einmal pro Runde ausgeloest.
+      # EN: This total ticket count triggers the goal once per round.
+      tickets: 25
+      # DE: Betrag, der beim Erreichen direkt in den Topf gelegt wird.
+      # EN: Amount added directly to the pot when the goal is reached.
+      add-pot: 1000.0
+      # DE: Sendet eine Chatnachricht beim Erreichen.
+      # EN: Sends a chat message when reached.
+      broadcast: true
+      # DE: Konsolenbefehle beim Erreichen. Platzhalter: %goal_name%, %goal_tickets%, %goal_bonus%, %pot%.
+      # EN: Console commands when reached. Placeholders: %goal_name%, %goal_tickets%, %goal_bonus%, %pot%.
+      commands: []
+
+achievements:
+  # DE: Aktiviert Lotterie-Erfolge fuer Spieler.
+  # EN: Enables lottery achievements for players.
+  enabled: true
+  # DE: Sendet eine Servernachricht, wenn ein Erfolg freigeschaltet wird.
+  # EN: Broadcasts when an achievement is unlocked.
+  broadcast: true
+  # DE: Jeder Eintrag nutzt enabled (aktiv), name (Anzeigename) und commands (Konsolenbefehle beim Freischalten).
+  # EN: Each entry uses enabled, name, and commands (console commands when unlocked).
+  items:
+    first_ticket:
+      enabled: true
+      name: "Erstes Ticket"
+      commands: []
+    tickets_10:
+      enabled: true
+      name: "10 Tickets gekauft"
+      commands: []
+    tickets_100:
+      enabled: true
+      name: "100 Tickets gekauft"
+      commands: []
+    first_win:
+      enabled: true
+      name: "Erster Gewinn"
+      commands: []
+    wins_5:
+      enabled: true
+      name: "Glueckspilz"
+      commands: []
+    spent_10000:
+      enabled: true
+      name: "Jackpotjaeger"
+      commands: []
+    lucky_hit:
+      enabled: true
+      name: "Glueckszahl getroffen"
+      commands: []
+    pity_reward:
+      enabled: true
+      name: "Comeback Bonus"
+      commands: []
+    gift_ticket:
+      enabled: true
+      name: "Grosszuegig"
+      commands: []
+
+vip-cosmetics:
+  # DE: Aktiviert kosmetische Effekte fuer Spieler mit Permission, ohne Gewinnchancen zu veraendern.
+  # EN: Enables cosmetic effects for players with permission without changing win chances.
+  enabled: true
+  # DE: Permission fuer kosmetische Lotterie-Effekte.
+  # EN: Permission for cosmetic lottery effects.
+  permission: "lottery.vip"
+  # DE: Sound beim Ticketkauf fuer VIP-Spieler.
+  # EN: Sound played on ticket purchase for VIP players.
+  purchase-sound: "ENTITY_EXPERIENCE_ORB_PICKUP"
+  # DE: Konsolenbefehle beim VIP-Ticketkauf. Platzhalter: %player%, %amount%, %cost%.
+  # EN: Console commands on VIP ticket purchase. Placeholders: %player%, %amount%, %cost%.
+  commands-on-purchase: []
+
+mystery-jackpot:
+  # DE: Aktiviert einen geheimen Zusatzbetrag, der erst kurz vor der Ziehung in den Topf gelegt wird.
+  # EN: Enables a hidden bonus amount that is added to the pot right before the draw.
+  enabled: false
+  # DE: Minimaler Mystery-Bonus.
+  # EN: Minimum mystery bonus.
+  min-amount: 500.0
+  # DE: Maximaler Mystery-Bonus.
+  # EN: Maximum mystery bonus.
+  max-amount: 2500.0
+  # DE: Sendet die Enthuellung des Mystery-Bonus im Chat.
+  # EN: Broadcasts the mystery bonus reveal in chat.
+  broadcast: true
+
 admin-log:
   # DE: Aktiviert das Admin-Log für wichtige Aktionen.
   # EN: Enables the admin log for important actions.
@@ -551,7 +730,20 @@ draw-animation:
   gui:
     # DE: Öffnet während der Ziehung ein kleines animiertes Gewinner-GUI für online Spieler.
     # EN: Opens a small animated winner GUI for online players during the draw.
-    enabled: false
+    enabled: true
+    # DE: true oeffnet das Animations-GUI fuer alle automatisch. false bedeutet: Spieler muessen /lottery watch klicken.
+    # EN: true opens the animation GUI for everyone automatically. false means players must click /lottery watch.
+    auto-open-for-everyone: false
+    pre-notice:
+      # DE: Sendet kurz vor der Ziehung eine anklickbare Nachricht zum Zuschauen.
+      # EN: Sends a clickable watch message shortly before the draw.
+      enabled: true
+      # DE: Wie viele Sekunden vor der Ziehung die Zuschauen-Nachricht gesendet wird.
+      # EN: How many seconds before the draw the watch message is sent.
+      seconds-before: 30
+      # DE: Befehl, der beim Klick auf die Zuschauen-Nachricht ausgefuehrt wird.
+      # EN: Command executed when clicking the watch message.
+      command: "/lottery watch"
     # DE: Titel des Ziehungs-GUIs.
     # EN: Title of the draw GUI.
     title: "&6&lLotterie Ziehung"

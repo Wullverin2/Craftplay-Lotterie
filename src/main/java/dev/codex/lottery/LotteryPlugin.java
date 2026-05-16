@@ -36,7 +36,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 8;
+    private static final int CONFIG_VERSION = 9;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -315,6 +315,9 @@ public final class LotteryPlugin extends JavaPlugin {
             - `%lottery_player_stats_highest_win%`
             - `%lottery_player_stats_total_won%`
             - `%lottery_player_stats_rounds_played%`
+            - `%lottery_player_stats_losing_streak%`
+            - `%lottery_player_stats_lucky_number_hits%`
+            - `%lottery_player_stats_gifted_tickets%`
             - `%lottery_player_stats_profit%`
             - `%lottery_my_rank_tickets_bought%`
             - `%lottery_my_rank_money_spent%`
@@ -332,6 +335,11 @@ public final class LotteryPlugin extends JavaPlugin {
             - `%lottery_season_wins%`
             - `%lottery_season_total_won%`
             - `%lottery_season_profit%`
+            - `%lottery_lucky_number%`
+            - `%lottery_lottery_group%`
+            - `%lottery_achievement_count%`
+            - `%lottery_claim_payments%`
+            - `%lottery_claim_notifications%`
 
             ## Toplisten
             Schema: `%lottery_top_<statistik>_<rang>%`, `%lottery_top_<statistik>_<rang>_name%`, `%lottery_top_<statistik>_<rang>_value%`

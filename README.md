@@ -27,6 +27,11 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Admin-Auswertungen für Tages-/Wochen-/Monatsumsatz, Auszahlungsquote und Steuern
 - Optionales Anti-Abuse-Monitoring für auffällige Kaufspitzen
 - Animiertes Ziehungs-GUI und Gewinnerwand
+- Anklickbare Zuschauen-Meldung 30 Sekunden vor der Ziehung; Spieler entscheiden per `/lottery watch`, ob sie das Animations-GUI sehen wollen
+- Ticket-Geschenke ueber `/lottery gift`, Glueckszahlen ueber `/lottery lucky`, Ticket-Album und Gewinn-Briefkasten
+- Gruppen-/Clan-Lotterie ueber `/lottery group`, optional mit geteilter Auszahlung an teilnehmende Gruppenmitglieder
+- Trostpreise, Pechserien-Bonus, Community-Ziele, Mystery-Jackpot und konfigurierbare Spieler-Erfolge
+- Kosmetische VIP-Effekte ohne bessere Gewinnchance
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
 - GitHub-Release-Updatechecker mit Startprüfung, Admin-Join-Hinweis und manuellem `/lottery updatecheck`
 - Automatische GitHub Releases bei Push auf `main`, inklusive fertiger JAR und Changelog
@@ -42,6 +47,13 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery help`
 - `/lottery buy <anzahl>`
 - `/lottery free [grund]`
+- `/lottery gift <spieler> <anzahl>`
+- `/lottery lucky [zahl|clear]`
+- `/lottery group [name|clear]`
+- `/lottery album`
+- `/lottery claims`
+- `/lottery claims collect`
+- `/lottery watch`
 - `/lottery shop`
 - `/lottery shop buy <reward>`
 - `/lottery gui`
@@ -119,7 +131,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `lang/de.yml` und `lang/en.yml`: Nachrichten, Broadcasts und Buttons.
 - `holograms.yml`: Hologramm-Templates, Anzeigenamen und Positionen.
 - `lotteries.yml`: Getrennte Lotterie-Profile.
-- `data.yml`: Laufende Runden, Historie, Statistiken, Saisonpunkte und offene Nachrichten.
+- `data.yml`: Laufende Runden, Historie, Statistiken, Saisonpunkte, Glueckszahlen, Gruppen, Erfolge, Community-Ziele, Gewinn-Briefkasten und offene Nachrichten.
 - `transactions.yml`: Ticketkäufe, Rückerstattungen, Steuern, Auszahlungen und Shopkäufe.
 - `admin-log.yml`: Admin-Aktionen und Sicherheitsereignisse.
 
@@ -170,6 +182,14 @@ Beispiele:
 - `%lottery_my_rank_rounds_played%`
 - `%lottery_my_rank_current_tickets%`
 - `%lottery_season_points%`
+- `%lottery_lucky_number%`
+- `%lottery_lottery_group%`
+- `%lottery_achievement_count%`
+- `%lottery_claim_payments%`
+- `%lottery_claim_notifications%`
+- `%lottery_player_stats_losing_streak%`
+- `%lottery_player_stats_lucky_number_hits%`
+- `%lottery_player_stats_gifted_tickets%`
 - `%lottery_top_wins_1%`
 - `%lottery_top_wins_1_name%`
 - `%lottery_top_wins_1_value%`
@@ -185,10 +205,14 @@ In `gui.yml` kann jedes Item eigene Aktionen haben:
 - `close`
 - `open-language`
 - `open-personal-stats`
+- `open-album`
+- `open-claims`
+- `watch-draw`
 - `open-winner-wall`
 - `open-stats`
 - `open-admin`
 - `open-main`
+- `open-profile`
 - `force-draw`
 - `reload-plugin`
 - `reset-round`

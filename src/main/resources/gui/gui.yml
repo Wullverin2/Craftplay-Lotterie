@@ -9,10 +9,12 @@
 # EN: slot = one slot, slots = multiple slots/ranges, material = Bukkit material, head-database-id = HeadDatabase head,
 # EN: skull-owner = player name for player heads, name/lore = display, buy-amount = ticket amount on buy buttons,
 # EN: refresh-after-click = refresh GUI after click, actions = click actions.
-# DE: Aktionen: buy:<anzahl>, close, open-stats, open-personal-stats, open-language, open-admin, open-main,
-# DE: force-draw, reload-plugin, reset-round, language:<code>, player-command:<befehl>, console-command:<befehl>, message:<text>.
-# EN: Actions: buy:<amount>, close, open-stats, open-personal-stats, open-language, open-admin, open-main,
-# EN: force-draw, reload-plugin, reset-round, language:<code>, player-command:<command>, console-command:<command>, message:<text>.
+# DE: Aktionen: buy:<anzahl>, close, open-stats, open-personal-stats, open-album, open-claims,
+# DE: watch-draw, open-language, open-admin, open-main, open-profile, force-draw, reload-plugin,
+# DE: reset-round, language:<code>, player-command:<befehl>, console-command:<befehl>, message:<text>.
+# EN: Actions: buy:<amount>, close, open-stats, open-personal-stats, open-album, open-claims,
+# EN: watch-draw, open-language, open-admin, open-main, open-profile, force-draw, reload-plugin,
+# EN: reset-round, language:<code>, player-command:<command>, console-command:<command>, message:<text>.
 
 gui:
   # DE: Aktiviert das Hauptmenü. EN: Enables the main menu.
@@ -20,7 +22,7 @@ gui:
   # DE: Titel des Hauptmenüs. EN: Title of the main menu.
   title: "&6&lCraftplay Lotterie"
   # DE: Inventargröße, muss ein Vielfaches von 9 sein. EN: Inventory size, must be a multiple of 9.
-  size: 36
+  size: 45
   # DE: Standard-Füllmaterial für leere Slots. EN: Default filler material for empty slots.
   filler-material: "BLACK_STAINED_GLASS_PANE"
   # DE: Alle Buttons/Dekoitems des Hauptmenüs. EN: All buttons/decorative items in the main menu.
@@ -102,6 +104,7 @@ gui:
       lore:
         - "&7Deine Tickets: &f%tickets%"
         - "&7Deine Chance: &f%chance%"
+        - "&7Gruppe: &f%lottery_group%"
         - "&7CMI Balance: &f%cmi_user_balance_formatted%"
         - "&7Jobs Level: &f%jobsr_user_totallevels%"
         - "&7Quest Fortschritt: &f%quests_player_current_quest_names%"
@@ -158,6 +161,56 @@ gui:
         - "&aKlicken zum Öffnen"
       actions:
         - "open-language"
+    album:
+      slot: 36
+      material: "BOOK"
+      name: "&dTicket-Album"
+      lore:
+        - "&7Tickets, Glueckszahl,"
+        - "&7Erfolge und Rang ansehen."
+        - "&aKlicken zum Anzeigen"
+      actions:
+        - "open-album"
+    claims:
+      slot: 37
+      material: "ENDER_CHEST"
+      name: "&aGewinn-Briefkasten"
+      lore:
+        - "&7Offene Zahlungen: &f%claim_payments%"
+        - "&7Offene Nachrichten: &f%claim_notifications%"
+        - "&aKlicken zum Anzeigen"
+      actions:
+        - "open-claims"
+    lucky-number:
+      slot: 38
+      material: "AMETHYST_SHARD"
+      name: "&dGlueckszahl"
+      lore:
+        - "&7Aktuell: &f%lucky_number%"
+        - "&7Setzen mit &e/lottery lucky <zahl>"
+        - "&7Loeschen mit &e/lottery lucky clear"
+      actions:
+        - "message:&dNutze /lottery lucky <zahl>, um deine Glueckszahl zu setzen."
+    watch-draw:
+      slot: 39
+      material: "SPYGLASS"
+      name: "&6Ziehung ansehen"
+      lore:
+        - "&7Schaltet das Animations-GUI"
+        - "&7fuer die naechste Ziehung um."
+        - "&aKlicken zum Umschalten"
+      actions:
+        - "watch-draw"
+    profiles:
+      slot: 40
+      material: "MAP"
+      name: "&bJackpot-Stufen"
+      lore:
+        - "&7Waehle kleine, normale"
+        - "&7oder Event-Lotterien."
+        - "&aKlicken zum Oeffnen"
+      actions:
+        - "open-profile"
     admin:
       slot: 34
       material: "COMMAND_BLOCK"
@@ -288,6 +341,9 @@ personal-stats-gui:
         - "&7Höchster Gewinn: &f%player_stats_highest_win%"
         - "&7Gesamt gewonnen: &f%player_stats_total_won%"
         - "&7Bilanz: &f%player_stats_profit%"
+        - "&7Pechserie: &f%player_stats_losing_streak%"
+        - "&7Glueckszahl: &f%lucky_number%"
+        - "&7Erfolge: &f%achievement_count%"
         - "&7Letzter Kauf: &f%player_stats_last_purchase%"
         - "&7Letzter Gewinn: &f%player_stats_last_win%"
       actions: []

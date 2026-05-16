@@ -13,6 +13,13 @@ public final class PlayerLotteryStats {
     private double highestWin;
     private double totalWon;
     private int roundsPlayed;
+    private int losingStreak;
+    private int bestLosingStreak;
+    private int consolationRewards;
+    private int pityRewards;
+    private int luckyNumberHits;
+    private int giftedTickets;
+    private double giftSpent;
     private LocalDateTime lastPurchaseAt;
     private LocalDateTime lastWinAt;
 
@@ -81,6 +88,62 @@ public final class PlayerLotteryStats {
         this.roundsPlayed = roundsPlayed;
     }
 
+    public int getLosingStreak() {
+        return losingStreak;
+    }
+
+    public void setLosingStreak(int losingStreak) {
+        this.losingStreak = Math.max(0, losingStreak);
+    }
+
+    public int getBestLosingStreak() {
+        return bestLosingStreak;
+    }
+
+    public void setBestLosingStreak(int bestLosingStreak) {
+        this.bestLosingStreak = Math.max(0, bestLosingStreak);
+    }
+
+    public int getConsolationRewards() {
+        return consolationRewards;
+    }
+
+    public void setConsolationRewards(int consolationRewards) {
+        this.consolationRewards = Math.max(0, consolationRewards);
+    }
+
+    public int getPityRewards() {
+        return pityRewards;
+    }
+
+    public void setPityRewards(int pityRewards) {
+        this.pityRewards = Math.max(0, pityRewards);
+    }
+
+    public int getLuckyNumberHits() {
+        return luckyNumberHits;
+    }
+
+    public void setLuckyNumberHits(int luckyNumberHits) {
+        this.luckyNumberHits = Math.max(0, luckyNumberHits);
+    }
+
+    public int getGiftedTickets() {
+        return giftedTickets;
+    }
+
+    public void setGiftedTickets(int giftedTickets) {
+        this.giftedTickets = Math.max(0, giftedTickets);
+    }
+
+    public double getGiftSpent() {
+        return giftSpent;
+    }
+
+    public void setGiftSpent(double giftSpent) {
+        this.giftSpent = Math.max(0.0D, giftSpent);
+    }
+
     public LocalDateTime getLastPurchaseAt() {
         return lastPurchaseAt;
     }
@@ -109,11 +172,42 @@ public final class PlayerLotteryStats {
         roundsPlayed++;
     }
 
+    public void recordLoss(String name) {
+        playerName = name;
+        losingStreak++;
+        bestLosingStreak = Math.max(bestLosingStreak, losingStreak);
+    }
+
     public void recordWin(String name, double amount, LocalDateTime now) {
         playerName = name;
         wins++;
         totalWon += amount;
         highestWin = Math.max(highestWin, amount);
         lastWinAt = now;
+        losingStreak = 0;
+    }
+
+    public void recordConsolationReward(String name) {
+        playerName = name;
+        consolationRewards++;
+    }
+
+    public void recordPityReward(String name, boolean resetStreak) {
+        playerName = name;
+        pityRewards++;
+        if (resetStreak) {
+            losingStreak = 0;
+        }
+    }
+
+    public void recordLuckyNumberHit(String name) {
+        playerName = name;
+        luckyNumberHits++;
+    }
+
+    public void recordGiftPurchase(String name, int amount, double cost) {
+        playerName = name;
+        giftedTickets += amount;
+        giftSpent += cost;
     }
 }

@@ -25,7 +25,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
 
     private static final List<String> SUBCOMMANDS = List.of(
-        "help", "buy", "free", "shop", "gui", "jackpot", "winners", "stats", "nextdraw",
+        "help", "buy", "free", "gift", "lucky", "group", "album", "claims", "watch", "shop", "gui", "jackpot", "winners", "stats", "nextdraw",
         "draw", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
         "season", "preview", "editor", "lotteries", "transactions", "profile", "profiles", "reminders",
@@ -73,6 +73,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "help" -> handleHelp(sender);
             case "buy" -> handleBuy(sender, args);
             case "free" -> handleFree(sender, args);
+            case "gift" -> handleGift(sender, args);
+            case "lucky" -> handleLucky(sender, args);
+            case "group" -> handleGroup(sender, args);
+            case "album" -> handleAlbum(sender);
+            case "claims" -> handleClaims(sender, args);
+            case "watch" -> handleWatch(sender);
             case "shop" -> handleShop(sender, args);
             case "gui" -> handleGui(sender);
             case "jackpot", "status" -> handleStatus(sender);
@@ -138,6 +144,19 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             String subcommand = args[0].toLowerCase(Locale.ROOT);
             if ("buy".equals(subcommand)) {
                 suggestions.addAll(List.of("1", "5", "10", "25"));
+            } else if ("gift".equals(subcommand)) {
+                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                    String name = onlinePlayer.getName();
+                    if (name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                        suggestions.add(name);
+                    }
+                }
+            } else if ("lucky".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("7", "13", "21", "42", "clear"));
+            } else if ("group".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("clear"));
+            } else if ("claims".equals(subcommand)) {
+                addMatching(suggestions, args[1], List.of("collect"));
             } else if ("free".equals(subcommand)) {
                 addMatching(suggestions, args[1], List.of("default", "playtime", "jobs", "quests", "votes"));
             } else if ("shop".equals(subcommand)) {
@@ -187,6 +206,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             } else if ("log".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("player", "action", "date"));
             }
+        } else if (args.length == 3 && "gift".equalsIgnoreCase(args[0])) {
+            addMatching(suggestions, args[2], List.of("1", "5", "10", "25"));
         } else if (args.length == 3 && "shop".equalsIgnoreCase(args[0]) && "buy".equalsIgnoreCase(args[1])) {
             addMatching(suggestions, args[2], List.of("default"));
         } else if (args.length == 3 && "reminders".equalsIgnoreCase(args[0])) {
@@ -271,6 +292,88 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         String reason = args.length >= 2 ? args[1] : "default";
         PurchaseResult result = lotteryManager.claimFreeTickets(player, reason);
         MessageUtil.send(player, plugin.getMessagesConfig(player), result.messagePath(), result.placeholders());
+        return true;
+    }
+
+    private boolean handleGift(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        if (args.length < 3) {
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.ticket-gift-usage");
+            return true;
+        }
+
+        int amount = parsePositiveInt(args[2], 1);
+        lotteryManager.giftTickets(player, Bukkit.getOfflinePlayer(args[1]), amount);
+        return true;
+    }
+
+    private boolean handleLucky(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        lotteryManager.setLuckyNumber(player, args.length >= 2 ? args[1] : "");
+        return true;
+    }
+
+    private boolean handleGroup(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        lotteryManager.setLotteryGroup(player, args.length >= 2 ? args[1] : "");
+        return true;
+    }
+
+    private boolean handleAlbum(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        lotteryManager.showTicketAlbum(player);
+        return true;
+    }
+
+    private boolean handleClaims(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        if (args.length >= 2 && "collect".equalsIgnoreCase(args[1])) {
+            lotteryManager.collectClaimMailbox(player);
+            return true;
+        }
+        lotteryManager.showClaimMailbox(player);
+        return true;
+    }
+
+    private boolean handleWatch(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.player-only");
+            return true;
+        }
+        if (!requireUsePermission(player)) {
+            return true;
+        }
+        lotteryManager.toggleDrawWatcher(player);
         return true;
     }
 
@@ -1064,6 +1167,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         sendHelpLine(sender, "messages.help-line-status", "/lottery");
         sendHelpLine(sender, "messages.help-line-buy", "/lottery buy 1");
         sendHelpLine(sender, "messages.help-line-free", "/lottery free");
+        sendHelpLine(sender, "messages.help-line-gift", "/lottery gift Spieler 1");
+        sendHelpLine(sender, "messages.help-line-lucky", "/lottery lucky 7");
+        sendHelpLine(sender, "messages.help-line-group", "/lottery group team");
+        sendHelpLine(sender, "messages.help-line-album", "/lottery album");
+        sendHelpLine(sender, "messages.help-line-claims", "/lottery claims");
+        sendHelpLine(sender, "messages.help-line-watch", "/lottery watch");
         sendHelpLine(sender, "messages.help-line-shop", "/lottery shop");
         sendHelpLine(sender, "messages.help-line-gui", "/lottery gui");
         sendHelpLine(sender, "messages.help-line-profile", "/lottery profile");
