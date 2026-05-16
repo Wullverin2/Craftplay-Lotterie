@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 7
+config-version: 8
 
 update-checker:
   # DE: Aktiviert die Prüfung auf neue Plugin-Versionen über GitHub Releases.
@@ -13,6 +13,9 @@ update-checker:
   # DE: GitHub-Repository im Format Besitzer/Repository. Daraus wird die Standard-API-URL gebaut.
   # EN: GitHub repository in owner/repository format. This is used to build the default API URL.
   repository: "Wullverin2/Craftplay-Lotterie"
+  # DE: Release-Kanal: stable prüft normale Releases, beta/dev erlauben auch Pre-Releases.
+  # EN: Release channel: stable checks normal releases, beta/dev also allow pre-releases.
+  channel: "stable"
   # DE: Optionale vollständige GitHub-API-URL. Leer bedeutet: nutze repository + /releases/latest.
   # EN: Optional full GitHub API URL. Empty means: use repository + /releases/latest.
   api-url: ""
@@ -28,6 +31,10 @@ update-checker:
   # DE: Timeout der GitHub-Anfrage in Sekunden.
   # EN: Timeout for the GitHub request in seconds.
   timeout-seconds: 10
+  clickable-download:
+    # DE: Sendet Admins zusätzlich einen anklickbaren Download-Link im Chat.
+    # EN: Also sends admins a clickable download link in chat.
+    enabled: true
 
 settings:
   # DE: Zeitzone für Ziehungen, Countdown, Tageslimits und Statistiken.
@@ -262,6 +269,10 @@ admin-safety:
   # DE: Zeitfenster für die zweite Bestätigung in Sekunden.
   # EN: Time window for the second confirmation in seconds.
   confirm-timeout-seconds: 20
+  granular-permissions:
+    # DE: Aktiviert zusätzliche Admin-Permissions wie lottery.admin.draw, lottery.admin.reload und lottery.admin.rollback.
+    # EN: Enables additional admin permissions like lottery.admin.draw, lottery.admin.reload and lottery.admin.rollback.
+    enabled: true
 
 transactions:
   # DE: Aktiviert ein separates Transaktionslog für Käufe, Rückerstattungen und Auszahlungen.
@@ -337,6 +348,32 @@ backups:
     # DE: Erstellt nach jeder Ziehung automatisch ein ZIP-Backup.
     # EN: Automatically creates a ZIP backup after every draw.
     enabled: true
+  retention:
+    # DE: Löscht automatisch alte Backup-ZIPs, wenn mehr als max-files vorhanden sind. 0 deaktiviert das Löschen.
+    # EN: Automatically deletes old backup ZIPs when more than max-files exist. 0 disables deletion.
+    max-files: 30
+
+fairness:
+  # DE: Aktiviert nachvollziehbare Ziehungen mit Seed, Hash und Ticket-Roll.
+  # EN: Enables verifiable draws with seed, hash and ticket roll.
+  enabled: true
+  # DE: Zeigt den Hash vor der Gewinnerermittlung im Chat.
+  # EN: Shows the hash in chat before winners are calculated.
+  broadcast-hash-before-draw: true
+  # DE: Zeigt Seed und Prüfdaten nach der Ziehung im Chat.
+  # EN: Shows seed and verification data after the draw.
+  broadcast-proof-after-draw: true
+
+rollback:
+  # DE: Aktiviert /lottery rollback für die letzte Ziehung.
+  # EN: Enables /lottery rollback for the last draw.
+  enabled: true
+  # DE: true zieht ausgezahlte Gewinne beim Rollback wieder von Gewinnern ab.
+  # EN: true withdraws paid winnings from winners during rollback.
+  withdraw-payouts: true
+  # DE: true erlaubt Rollback auch dann, wenn in der neuen Runde schon Tickets gekauft wurden.
+  # EN: true allows rollback even when tickets were already bought in the new round.
+  allow-overwrite-active-round: false
 
 eligibility:
   players:

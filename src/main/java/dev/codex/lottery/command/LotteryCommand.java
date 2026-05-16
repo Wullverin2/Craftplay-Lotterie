@@ -30,7 +30,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "simulate",
         "season", "preview", "editor", "lotteries", "transactions", "profile", "profiles", "reminders",
         "grantfree", "updateconfigs", "setupwizard", "audit", "web", "adminstats", "taxreport", "winnerwall",
-        "updatecheck"
+        "updatecheck", "rollback"
     );
 
     private static final List<String> HOLOGRAM_SUBCOMMANDS = List.of("create", "move", "delete", "list");
@@ -113,6 +113,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "setupwizard" -> handleSetupWizard(sender);
             case "winnerwall" -> handleWinnerWall(sender);
             case "updatecheck" -> handleUpdateCheck(sender);
+            case "rollback" -> handleRollback(sender);
             default -> {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.unknown-subcommand");
                 yield true;
@@ -422,8 +423,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleDraw(CommandSender sender) {
-        if (!sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        if (!requireAdminPermission(sender, "draw")) {
             return true;
         }
         if (lotteryManager.requireAdminConfirmation(sender, "force-draw")) {
@@ -436,8 +436,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleSimulate(CommandSender sender) {
-        if (!sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        if (!requireAdminPermission(sender, "draw")) {
             return true;
         }
 
@@ -447,8 +446,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleReload(CommandSender sender) {
-        if (!sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        if (!requireAdminPermission(sender, "reload")) {
             return true;
         }
         plugin.reloadPlugin();
@@ -567,8 +565,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleBackup(CommandSender sender) {
-        if (!sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        if (!requireAdminPermission(sender, "backup")) {
             return true;
         }
         lotteryManager.createBackup(sender);
@@ -845,11 +842,21 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleUpdateCheck(CommandSender sender) {
-        if (!sender.hasPermission("lottery.admin")) {
-            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        if (!requireAdminPermission(sender, "release")) {
             return true;
         }
         plugin.getUpdateChecker().checkNow(sender, true);
+        return true;
+    }
+
+    private boolean handleRollback(CommandSender sender) {
+        if (!requireAdminPermission(sender, "rollback")) {
+            return true;
+        }
+        if (lotteryManager.requireAdminConfirmation(sender, "rollback-draw")) {
+            return true;
+        }
+        lotteryManager.rollbackLastDraw(sender);
         return true;
     }
 
@@ -1036,6 +1043,22 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return false;
     }
 
+    private boolean requireAdminPermission(CommandSender sender, String node) {
+        if (hasAdminPermission(sender, node)) {
+            return true;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
+        return false;
+    }
+
+    private boolean hasAdminPermission(CommandSender sender, String node) {
+        if (sender.hasPermission("lottery.admin")) {
+            return true;
+        }
+        return plugin.getConfig().getBoolean("admin-safety.granular-permissions.enabled", true)
+            && sender.hasPermission("lottery.admin." + node);
+    }
+
     private void sendHelp(CommandSender sender) {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.help-header");
         sendHelpLine(sender, "messages.help-line-status", "/lottery");
@@ -1048,7 +1071,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         sendHelpLine(sender, "messages.help-line-winnerwall", "/lottery winnerwall");
         sendHelpLine(sender, "messages.help-line-winners", "/lottery winners");
         sendHelpLine(sender, "messages.help-line-nextdraw", "/lottery nextdraw");
-        if (sender.hasPermission("lottery.admin")) {
+        if (hasAdminPermission(sender, "draw")
+            || hasAdminPermission(sender, "reload")
+            || hasAdminPermission(sender, "backup")
+            || hasAdminPermission(sender, "rollback")
+            || hasAdminPermission(sender, "release")
+            || sender.hasPermission("lottery.admin")) {
             sendHelpLine(sender, "messages.help-line-admin", "/lottery admin");
         }
     }
@@ -1065,10 +1093,16 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
 
     private boolean isSubcommandAllowed(CommandSender sender, String subcommand) {
         return switch (subcommand) {
-            case "draw", "simulate", "reload", "setjackpot", "addjackpot", "reset", "info", "hologram", "admin",
-                "notifications", "payments", "backup", "export", "import", "debug", "doctor", "log", "setup", "season",
-                "preview", "editor", "lotteries", "transactions", "grantfree", "updateconfigs", "setupwizard", "audit",
-                "web", "adminstats", "taxreport", "updatecheck" -> sender.hasPermission("lottery.admin");
+            case "draw", "simulate" -> hasAdminPermission(sender, "draw");
+            case "reload" -> hasAdminPermission(sender, "reload");
+            case "backup" -> hasAdminPermission(sender, "backup");
+            case "hologram" -> hasAdminPermission(sender, "hologram");
+            case "adminstats", "taxreport" -> hasAdminPermission(sender, "stats");
+            case "updatecheck" -> hasAdminPermission(sender, "release");
+            case "rollback" -> hasAdminPermission(sender, "rollback");
+            case "setjackpot", "addjackpot", "reset", "info", "admin", "notifications", "payments", "export",
+                "import", "debug", "doctor", "log", "setup", "season", "preview", "editor", "lotteries",
+                "transactions", "grantfree", "updateconfigs", "setupwizard", "audit", "web" -> sender.hasPermission("lottery.admin");
             default -> sender.hasPermission("lottery.use");
         };
     }

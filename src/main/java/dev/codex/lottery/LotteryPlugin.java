@@ -17,11 +17,15 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -32,7 +36,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 7;
+    private static final int CONFIG_VERSION = 8;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -46,6 +50,7 @@ public final class LotteryPlugin extends JavaPlugin {
     private File lastConfigUpdateReportFile;
     private UpdateChecker updateChecker;
     private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
+    private final Map<String, FileConfiguration> guiConfigs = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -122,14 +127,58 @@ public final class LotteryPlugin extends JavaPlugin {
     }
 
     public FileConfiguration getGuiConfig() {
+        return getGuiConfig(getDefaultLanguage());
+    }
+
+    public FileConfiguration getGuiConfig(CommandSender sender) {
+        if (sender instanceof Player player) {
+            return getGuiConfig(getPlayerLanguage(player.getUniqueId()));
+        }
+        return getGuiConfig();
+    }
+
+    public FileConfiguration getGuiConfig(Player player) {
+        return getGuiConfig(getPlayerLanguage(player.getUniqueId()));
+    }
+
+    public FileConfiguration getGuiConfig(String language) {
+        String normalizedLanguage = language == null ? getDefaultLanguage() : language.toLowerCase(Locale.ROOT);
+        FileConfiguration config = guiConfigs.get(normalizedLanguage);
+        if (config != null) {
+            return config;
+        }
+        config = guiConfigs.get(getDefaultLanguage());
+        if (config != null) {
+            return config;
+        }
         return guiConfig;
+    }
+
+    public Collection<FileConfiguration> getGuiConfigs() {
+        return Collections.unmodifiableCollection(guiConfigs.values());
+    }
+
+    public Set<String> getAvailableLanguages() {
+        Set<String> languages = new LinkedHashSet<>(languageConfigs.keySet().stream().sorted().toList());
+        if (languages.isEmpty()) {
+            languages.add(getDefaultLanguage());
+        }
+        return Collections.unmodifiableSet(languages);
+    }
+
+    public String getLanguageDisplayName(String language) {
+        return switch (language.toLowerCase(Locale.ROOT)) {
+            case "de" -> "Deutsch";
+            case "en" -> "English";
+            default -> language.toUpperCase(Locale.ROOT);
+        };
     }
 
     public void saveGuiConfig() {
         try {
-            guiConfig.save(new File(getDataFolder(), "gui/gui.yml"));
+            getGuiConfig().save(new File(getDataFolder(), "gui/" + getDefaultLanguage() + ".yml"));
         } catch (IOException exception) {
-            getLogger().severe("Could not save gui.yml: " + exception.getMessage());
+            getLogger().severe("Could not save default language GUI config: " + exception.getMessage());
         }
     }
 
@@ -209,6 +258,8 @@ public final class LotteryPlugin extends JavaPlugin {
 
         copyDefaultReference("config.yml", new File(referenceFolder, "config.yml"));
         copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui.yml"));
+        copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui-de.yml"));
+        copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui-en.yml"));
         copyDefaultReference("holograms.yml", new File(referenceFolder, "holograms.yml"));
         copyDefaultReference("lotteries.yml", new File(referenceFolder, "lotteries.yml"));
         copyDefaultReference("lang/de.yml", new File(referenceFolder, "lang-de.yml"));
@@ -329,10 +380,20 @@ public final class LotteryPlugin extends JavaPlugin {
         List<String> changedFiles = new ArrayList<>();
         updatedFiles += updateConfigDefaults("config.yml", new File(getDataFolder(), "config.yml"), changedFiles) ? 1 : 0;
         updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml"), changedFiles) ? 1 : 0;
+        for (String language : getAvailableLanguages()) {
+            updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/" + language + ".yml"), changedFiles) ? 1 : 0;
+        }
         updatedFiles += updateConfigDefaults("holograms.yml", hologramsFile, changedFiles) ? 1 : 0;
         updatedFiles += updateConfigDefaults("lotteries.yml", lotteriesFile, changedFiles) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lang/de.yml", new File(getDataFolder(), "lang/de.yml"), changedFiles) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lang/en.yml", new File(getDataFolder(), "lang/en.yml"), changedFiles) ? 1 : 0;
+        File languageFolder = new File(getDataFolder(), "lang");
+        File[] languageFiles = languageFolder.listFiles((directory, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (languageFiles != null) {
+            for (File languageFile : languageFiles) {
+                String fileName = languageFile.getName();
+                String bundledResource = resourceExists("lang/" + fileName) ? "lang/" + fileName : "lang/de.yml";
+                updatedFiles += updateConfigDefaults(bundledResource, languageFile, changedFiles) ? 1 : 0;
+            }
+        }
         writeConfigUpdateReport(changedFiles);
         reloadConfig();
         loadCustomConfigs();
@@ -396,7 +457,6 @@ public final class LotteryPlugin extends JavaPlugin {
     }
 
     private void loadCustomConfigs() {
-        guiConfig = loadCustomConfigWithDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml"));
         hologramsFile = new File(getDataFolder(), "holograms.yml");
         hologramsConfig = loadCustomConfigWithDefaults("holograms.yml", hologramsFile);
         lotteriesFile = new File(getDataFolder(), "lotteries.yml");
@@ -404,6 +464,7 @@ public final class LotteryPlugin extends JavaPlugin {
         playerLanguagesFile = new File(getDataFolder(), "player-languages.yml");
         playerLanguagesConfig = YamlConfiguration.loadConfiguration(playerLanguagesFile);
         loadLanguageConfigs();
+        loadGuiConfigs();
     }
 
     private void loadLanguageConfigs() {
@@ -417,7 +478,67 @@ public final class LotteryPlugin extends JavaPlugin {
         for (File languageFile : languageFiles) {
             String fileName = languageFile.getName();
             String language = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
-            languageConfigs.put(language, loadCustomConfigWithDefaults("lang/" + fileName, languageFile));
+            String bundledResource = resourceExists("lang/" + fileName) ? "lang/" + fileName : "lang/de.yml";
+            languageConfigs.put(language, loadCustomConfigWithDefaults(bundledResource, languageFile));
+        }
+    }
+
+    private boolean resourceExists(String resourcePath) {
+        try (InputStream inputStream = getResource(resourcePath)) {
+            return inputStream != null;
+        } catch (IOException exception) {
+            return false;
+        }
+    }
+
+    private void loadGuiConfigs() {
+        guiConfigs.clear();
+        File guiFolder = new File(getDataFolder(), "gui");
+        if (!guiFolder.exists() && !guiFolder.mkdirs()) {
+            getLogger().warning("Could not create gui folder.");
+            guiConfig = new YamlConfiguration();
+            return;
+        }
+
+        File legacyGuiFile = new File(guiFolder, "gui.yml");
+        guiConfig = loadCustomConfigWithDefaults("gui/gui.yml", legacyGuiFile);
+        ensureGuiFilesForLanguages(guiFolder, legacyGuiFile);
+
+        File[] guiFiles = guiFolder.listFiles((directory, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (guiFiles == null) {
+            return;
+        }
+
+        for (File guiFile : guiFiles) {
+            String fileName = guiFile.getName();
+            String language = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
+            if ("gui".equals(language)) {
+                continue;
+            }
+            guiConfigs.put(language, loadCustomConfigWithDefaults("gui/gui.yml", guiFile));
+        }
+
+        if (!guiConfigs.containsKey(getDefaultLanguage())) {
+            guiConfigs.put(getDefaultLanguage(), guiConfig);
+        }
+    }
+
+    private void ensureGuiFilesForLanguages(File guiFolder, File legacyGuiFile) {
+        for (String language : getAvailableLanguages()) {
+            File languageGuiFile = new File(guiFolder, language + ".yml");
+            if (languageGuiFile.exists()) {
+                continue;
+            }
+            try {
+                if (legacyGuiFile.exists()) {
+                    Files.copy(legacyGuiFile.toPath(), languageGuiFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    copyDefaultReference("gui/gui.yml", languageGuiFile);
+                }
+                getLogger().info("Created GUI language file: gui/" + language + ".yml");
+            } catch (IOException exception) {
+                getLogger().warning("Could not create GUI language file for " + language + ": " + exception.getMessage());
+            }
         }
     }
 
@@ -428,10 +549,17 @@ public final class LotteryPlugin extends JavaPlugin {
                 return config;
             }
 
+            String before = config.saveToString();
             YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
                 new InputStreamReader(inputStream, StandardCharsets.UTF_8));
             config.setDefaults(defaults);
             config.options().copyDefaults(true);
+            if (!before.equals(config.saveToString())) {
+                if (file.getParentFile() != null && !file.getParentFile().exists()) {
+                    file.getParentFile().mkdirs();
+                }
+                config.save(file);
+            }
         } catch (IOException exception) {
             getLogger().warning("Could not read defaults for " + file.getName() + ": " + exception.getMessage());
         }

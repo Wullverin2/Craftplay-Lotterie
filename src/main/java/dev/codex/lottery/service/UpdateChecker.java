@@ -12,6 +12,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -19,6 +22,7 @@ import org.bukkit.entity.Player;
 public final class UpdateChecker {
 
     private static final Pattern VERSION_PARTS = Pattern.compile("[^0-9.]+");
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
 
     private final LotteryPlugin plugin;
     private final HttpClient httpClient;
@@ -110,9 +114,10 @@ public final class UpdateChecker {
                     return UpdateResult.failed("HTTP " + response.statusCode());
                 }
 
-                String latestVersion = stripVersionPrefix(readJsonString(response.body(), "tag_name"));
-                String releaseUrl = readJsonString(response.body(), "html_url");
-                String releaseName = readJsonString(response.body(), "name");
+                ReleaseInfo releaseInfo = readReleaseInfo(response.body(), allowsPrereleases());
+                String latestVersion = stripVersionPrefix(releaseInfo.version());
+                String releaseUrl = releaseInfo.url();
+                String releaseName = releaseInfo.name();
                 if (latestVersion.isBlank()) {
                     return UpdateResult.noRelease();
                 }
@@ -125,6 +130,7 @@ public final class UpdateChecker {
                     latestVersion,
                     releaseUrl,
                     releaseName == null || releaseName.isBlank() ? latestVersion : releaseName,
+                    getReleaseChannel(),
                     ""
                 );
             })
@@ -146,6 +152,14 @@ public final class UpdateChecker {
         MessageUtil.send(sender, plugin.getMessagesConfig(sender),
             result.updateAvailable() ? "messages.update-check-available" : "messages.update-check-current",
             result.placeholders());
+        if (result.updateAvailable() && sender instanceof Player player
+            && plugin.getConfig().getBoolean("update-checker.clickable-download.enabled", true)
+            && !result.releaseUrl().isBlank()) {
+            String button = MessageUtil.raw(player, plugin.getMessagesConfig(player), "messages.update-check-download-button", result.placeholders());
+            player.sendMessage(Component.empty()
+                .append(LEGACY_SERIALIZER.deserialize(MessageUtil.color(button)))
+                .clickEvent(ClickEvent.openUrl(result.releaseUrl())));
+        }
     }
 
     private boolean isCacheFresh() {
@@ -163,7 +177,17 @@ public final class UpdateChecker {
             return configuredUrl;
         }
         String repository = plugin.getConfig().getString("update-checker.repository", "Wullverin2/Craftplay-Lotterie");
-        return "https://api.github.com/repos/" + repository + "/releases/latest";
+        String suffix = allowsPrereleases() ? "/releases" : "/releases/latest";
+        return "https://api.github.com/repos/" + repository + suffix;
+    }
+
+    private String getReleaseChannel() {
+        return plugin.getConfig().getString("update-checker.channel", "stable").toLowerCase(Locale.ROOT);
+    }
+
+    private boolean allowsPrereleases() {
+        String channel = getReleaseChannel();
+        return channel.equals("beta") || channel.equals("dev") || channel.equals("development");
     }
 
     private String getCurrentVersion() {
@@ -181,6 +205,34 @@ public final class UpdateChecker {
             .replace("\\n", "\n")
             .replace("\\r", "\r")
             .replace("\\t", "\t");
+    }
+
+    private static boolean readJsonBoolean(String json, String key) {
+        Matcher matcher = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(true|false)").matcher(json);
+        return matcher.find() && Boolean.parseBoolean(matcher.group(1));
+    }
+
+    private static ReleaseInfo readReleaseInfo(String json, boolean allowPrerelease) {
+        if (!json.trim().startsWith("[")) {
+            return new ReleaseInfo(readJsonString(json, "tag_name"), readJsonString(json, "html_url"), readJsonString(json, "name"));
+        }
+
+        Matcher matcher = Pattern.compile("\\{[^{}]*\"tag_name\"\\s*:\\s*\"(?:\\\\.|[^\"])*\"[^{}]*}").matcher(json);
+        while (matcher.find()) {
+            String releaseJson = matcher.group();
+            if (!allowPrerelease && readJsonBoolean(releaseJson, "prerelease")) {
+                continue;
+            }
+            if (readJsonBoolean(releaseJson, "draft")) {
+                continue;
+            }
+            return new ReleaseInfo(
+                readJsonString(releaseJson, "tag_name"),
+                readJsonString(releaseJson, "html_url"),
+                readJsonString(releaseJson, "name")
+            );
+        }
+        return new ReleaseInfo("", "", "");
     }
 
     static String stripVersionPrefix(String version) {
@@ -219,14 +271,15 @@ public final class UpdateChecker {
         String latestVersion,
         String releaseUrl,
         String releaseName,
+        String channel,
         String error
     ) {
         private static UpdateResult failed(String error) {
-            return new UpdateResult(false, false, "", "", "", "", error == null ? "unknown" : error);
+            return new UpdateResult(false, false, "", "", "", "", "", error == null ? "unknown" : error);
         }
 
         private static UpdateResult noRelease() {
-            return new UpdateResult(true, false, "", "", "", "", "");
+            return new UpdateResult(true, false, "", "", "", "", "", "");
         }
 
         private Map<String, String> placeholders() {
@@ -235,8 +288,12 @@ public final class UpdateChecker {
                 "latest_version", latestVersion == null ? "" : latestVersion,
                 "release_url", releaseUrl == null ? "" : releaseUrl,
                 "release_name", releaseName == null ? "" : releaseName,
+                "channel", channel == null ? "" : channel,
                 "error", error == null ? "" : error
             );
         }
+    }
+
+    private record ReleaseInfo(String version, String url, String name) {
     }
 }

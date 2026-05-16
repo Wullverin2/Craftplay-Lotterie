@@ -30,6 +30,9 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - Discord/Webhook-Benachrichtigungen und automatisch generierte `PLACEHOLDERS.md`
 - GitHub-Release-Updatechecker mit Startprüfung, Admin-Join-Hinweis und manuellem `/lottery updatecheck`
 - Automatische GitHub Releases bei Push auf `main`, inklusive fertiger JAR und Changelog
+- Pro Sprache eigene GUI-Dateien unter `gui/<sprache>.yml`, automatische Erkennung neuer `lang/*.yml` Sprachen beim Start und Reload
+- Prüffähige Ziehungen mit Seed-Hash, Seed-Nachweis und Rollback-Snapshot der letzten Ziehung
+- Backup-Aufbewahrung, feingranulare Admin-Permissions und klickbare Update-Downloads
 - Sprachdateien für Deutsch und Englisch im Ordner `lang`
 - Referenzdateien mit Kommentaren werden beim Start unter `reference/` abgelegt
 
@@ -56,6 +59,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 - `/lottery setjackpot <betrag>`
 - `/lottery addjackpot <betrag>`
 - `/lottery reset`
+- `/lottery rollback`
 - `/lottery info <spieler>`
 - `/lottery admin`
 - `/lottery admin overview`
@@ -111,6 +115,7 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 
 - `config.yml`: Regeln, Preise, Steuern, Zeitplan, Teilnahmebedingungen, Shop, Free-Tickets, Webhooks und Backups.
 - `gui/gui.yml`: Menüs, Slots, Materialien, Namen, Lore und Klick-Aktionen.
+- `gui/de.yml`, `gui/en.yml` und weitere `gui/<sprache>.yml`: Sprachspezifische GUI-Dateien. Neue Dateien werden automatisch erkannt.
 - `lang/de.yml` und `lang/en.yml`: Nachrichten, Broadcasts und Buttons.
 - `holograms.yml`: Hologramm-Templates, Anzeigenamen und Positionen.
 - `lotteries.yml`: Getrennte Lotterie-Profile.
@@ -121,6 +126,18 @@ Ein umfangreiches Lotterie-Plugin für Paper/Spigot mit Vault, GUI, PlaceholderA
 ## Update-Checker
 
 Der Update-Checker fragt standardmäßig den neuesten GitHub Release von `https://api.github.com/repos/Wullverin2/Craftplay-Lotterie/releases/latest` ab. Die Quelle, Cache-Zeit, Startprüfung und Admin-Join-Benachrichtigung können in `config.yml` unter `update-checker` angepasst oder vollständig deaktiviert werden.
+
+Der Release-Kanal kann über `update-checker.channel` gesetzt werden. `stable` prüft normale Releases, `beta` und `dev` erlauben auch Pre-Releases. Wenn `update-checker.clickable-download.enabled` aktiv ist, bekommen Admins zusätzlich einen anklickbaren GitHub-Link.
+
+## Sprachen und GUI
+
+Neue Sprachen werden erkannt, sobald im Plugin-Ordner eine Datei wie `lang/fr.yml` liegt. Beim Start oder bei `/lottery reload` legt das Plugin automatisch die passende `gui/fr.yml` an, falls sie fehlt, und ergänzt fehlende Default-Keys über `/lottery updateconfigs` oder `/lottery doctor fix`.
+
+Die Sprach-GUI liest alle vorhandenen Sprachdateien dynamisch ein. Dadurch muss für eine neue Sprache kein neuer Button mehr hart in der Config eingetragen werden.
+
+## Fairness und Rollback
+
+Bei aktivierter `fairness.enabled` Option sendet die Ziehung vor der Gewinnerermittlung einen Seed-Hash und nach der Ziehung den Seed zur Prüfung. Für die letzte Ziehung wird außerdem ein Rollback-Snapshot gespeichert. Mit `/lottery rollback` kann ein Admin die letzte Ziehung zurückrollen; je nach Config werden ausgezahlte Gewinne dabei wieder abgezogen.
 
 ## GitHub Releases
 

@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -52,6 +55,7 @@ import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Display;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
@@ -88,7 +92,7 @@ public final class LotteryManager {
     private final Map<UUID, PurchaseWindow> purchaseWindows = new HashMap<>();
     private final Map<UUID, Long> purchaseCooldowns = new HashMap<>();
     private final List<PendingPayment> pendingPayments = new ArrayList<>();
-    private final Random random = new Random();
+    private final Random random = new SecureRandom();
     private final File dataFile;
     private final File logFile;
     private final File transactionFile;
@@ -420,9 +424,33 @@ public final class LotteryManager {
         }
 
         appendLog("backup", Map.of("file", backupFile.getName()));
+        cleanupOldBackups(backupFolder);
         MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.backup-created", Map.of(
             "file", backupFile.getAbsolutePath()
         ));
+    }
+
+    private void cleanupOldBackups(File backupFolder) {
+        int maxFiles = plugin.getConfig().getInt("backups.retention.max-files", 30);
+        if (maxFiles <= 0) {
+            return;
+        }
+
+        File[] backups = backupFolder.listFiles((directory, name) -> name.toLowerCase(Locale.ROOT).endsWith(".zip"));
+        if (backups == null || backups.length <= maxFiles) {
+            return;
+        }
+
+        List<File> sortedBackups = new ArrayList<>(List.of(backups));
+        sortedBackups.sort(Comparator.comparingLong(File::lastModified).reversed());
+        for (int index = maxFiles; index < sortedBackups.size(); index++) {
+            try {
+                Files.deleteIfExists(sortedBackups.get(index).toPath());
+            } catch (IOException exception) {
+                plugin.getLogger().warning("Could not delete old backup " + sortedBackups.get(index).getName()
+                    + ": " + exception.getMessage());
+            }
+        }
     }
 
     public void exportData(CommandSender sender) {
@@ -1159,6 +1187,11 @@ public final class LotteryManager {
         doctorLine(sender, "HeadDatabase", !plugin.getGuiConfig().saveToString().contains("head-database-id") || Bukkit.getPluginManager().isPluginEnabled("HeadDatabase"), "optional");
         doctorLine(sender, "LuckPerms", !plugin.getConfig().getBoolean("eligibility.groups.enabled", false) || Bukkit.getPluginManager().isPluginEnabled("LuckPerms"), "optional für Gruppenchecks");
         doctorLine(sender, "Lotterie-Profile", !areLotteryProfilesEnabled() || !getLotteryProfileIds().isEmpty(), getLotteryProfileIds().size() + " Profil(e)");
+        doctorLine(sender, "Sprachen", !plugin.getAvailableLanguages().isEmpty(), String.join(", ", plugin.getAvailableLanguages()));
+        doctorLine(sender, "GUI-Sprachen", plugin.getGuiConfigs().size() >= plugin.getAvailableLanguages().size(),
+            plugin.getGuiConfigs().size() + " GUI-Datei(en)");
+        doctorLine(sender, "Fairness", plugin.getConfig().getBoolean("fairness.enabled", true), "Seed/Hash pruefbar");
+        doctorLine(sender, "Rollback", plugin.getConfig().getBoolean("rollback.enabled", true), "letzte Ziehung");
         int invalidHolograms = countInvalidHologramLocations();
         doctorLine(sender, "Hologramme", invalidHolograms == 0, invalidHolograms + " ungültige Orte");
         appendLog("doctor", Map.of("sender", sender.getName()));
@@ -2097,6 +2130,68 @@ public final class LotteryManager {
         save();
     }
 
+    public void rollbackLastDraw(CommandSender sender) {
+        if (!plugin.getConfig().getBoolean("rollback.enabled", true)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rollback-disabled");
+            return;
+        }
+
+        ConfigurationSection rollbackSection = dataConfig.getConfigurationSection("rollback.last");
+        if (rollbackSection == null) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rollback-unavailable");
+            return;
+        }
+
+        String lotteryId = normalizeLotteryId(rollbackSection.getString("lottery", getActiveLotteryId()));
+        withLotteryContext(lotteryId, () -> {
+            if (currentRound().getTotalTickets() > 0 && !plugin.getConfig().getBoolean("rollback.allow-overwrite-active-round", false)) {
+                MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rollback-active-round");
+                return false;
+            }
+
+            if (plugin.getConfig().getBoolean("rollback.withdraw-payouts", true)) {
+                ConfigurationSection payouts = rollbackSection.getConfigurationSection("payouts");
+                if (payouts != null) {
+                    for (String key : payouts.getKeys(false)) {
+                        String uuid = payouts.getString(key + ".uuid", "");
+                        double amount = payouts.getDouble(key + ".amount", 0.0D);
+                        if (!uuid.isBlank() && amount > 0.0D) {
+                            economyService.withdraw(Bukkit.getOfflinePlayer(UUID.fromString(uuid)), amount);
+                        }
+                    }
+                }
+            }
+
+            LotteryRound round = currentRound();
+            round.reset(LocalDateTime.parse(rollbackSection.getString("round.started-at", LocalDateTime.now(getZoneId()).toString())),
+                rollbackSection.getDouble("round.jackpot", 0.0D));
+            ConfigurationSection tickets = rollbackSection.getConfigurationSection("round.tickets");
+            if (tickets != null) {
+                for (String key : tickets.getKeys(false)) {
+                    round.addTickets(UUID.fromString(key), tickets.getInt(key), 0.0D,
+                        rollbackSection.getDouble("round.spent." + key, 0.0D));
+                }
+            }
+
+            int payoutCount = rollbackSection.getConfigurationSection("payouts") == null
+                ? 0 : rollbackSection.getConfigurationSection("payouts").getKeys(false).size();
+            List<WinnerEntry> history = winnerHistory();
+            for (int index = 0; index < payoutCount && !history.isEmpty(); index++) {
+                history.remove(0);
+            }
+
+            dataConfig.set("rollback.last", null);
+            save();
+            appendLog("rollback_draw", Map.of("lottery", lotteryId));
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.rollback-success", Map.of(
+                "lottery", lotteryId,
+                "tickets", String.valueOf(round.getTotalTickets()),
+                "pot", economyService.format(getTotalPot())
+            ));
+            return true;
+        });
+    }
+
     public boolean requireAdminConfirmation(CommandSender sender, String action) {
         if (!plugin.getConfig().getBoolean("admin-safety.confirm-dangerous-actions", true)) {
             return false;
@@ -2273,6 +2368,10 @@ public final class LotteryManager {
         return LEGACY_SERIALIZER.deserialize(message);
     }
 
+    private FileConfiguration gui(Player player) {
+        return plugin.getGuiConfig(player);
+    }
+
     public void openMenu(Player player) {
         if (operationLotteryId == null) {
             withPlayerLotteryContext(player, () -> {
@@ -2282,21 +2381,21 @@ public final class LotteryManager {
             return;
         }
 
-        if (!plugin.getGuiConfig().getBoolean("gui.enabled", true)) {
+        FileConfiguration gui = gui(player);
+        if (!gui.getBoolean("gui.enabled", true)) {
             showStatus(player);
             return;
         }
 
-        Map<String, String> placeholders = createCommonPlaceholders(player);
-        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("gui.size", 27),
-            MessageUtil.color(getMainGuiTitle()));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+        Inventory inventory = Bukkit.createInventory(null, gui.getInt("gui.size", 27),
+            MessageUtil.color(getMainGuiTitle(player)));
+        Material fillerMaterial = parseMaterial(gui.getString("gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
 
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection("gui.items");
+        ConfigurationSection itemsSection = gui.getConfigurationSection("gui.items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
                 setConfiguredItem(inventory, player, "gui.items." + key);
@@ -2307,6 +2406,11 @@ public final class LotteryManager {
     }
 
     public boolean isLotteryMenu(String title) {
+        for (FileConfiguration gui : plugin.getGuiConfigs()) {
+            if (isGuiTitle(gui, title)) {
+                return true;
+            }
+        }
         return title.equals(MessageUtil.color(getMainGuiTitle()))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")))
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")))
@@ -2318,12 +2422,32 @@ public final class LotteryManager {
             || title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-overview-gui.title", "&cAdmin Übersicht")));
     }
 
+    private boolean isGuiTitle(FileConfiguration gui, String title) {
+        return title.equals(MessageUtil.color(gui.getString("gui.title", "&6Lottery")))
+            || title.equals(MessageUtil.color(gui.getString("stats-gui.title", "&6Lottery Statistik")))
+            || title.equals(MessageUtil.color(gui.getString("personal-stats-gui.title", "&6Deine Statistik")))
+            || title.equals(MessageUtil.color(gui.getString("winner-wall-gui.title", "&6Gewinnerwand")))
+            || title.equals(MessageUtil.color(gui.getString("language-gui.title", "&6Sprache")))
+            || title.equals(MessageUtil.color(gui.getString("admin-gui.title", "&cLotterie Admin")))
+            || title.equals(MessageUtil.color(gui.getString("profile-gui.title", "&6Lotterie auswaehlen")))
+            || title.equals(MessageUtil.color(gui.getString("editor-gui.title", "&dGUI Editor")))
+            || title.equals(MessageUtil.color(gui.getString("admin-overview-gui.title", "&cAdmin Uebersicht")));
+    }
+
     private String getMainGuiTitle() {
         String profileTitle = getActiveProfileString("gui-title", "");
         if (profileTitle != null && !profileTitle.isBlank()) {
             return profileTitle;
         }
         return plugin.getGuiConfig().getString("gui.title", "&6Lottery");
+    }
+
+    private String getMainGuiTitle(Player player) {
+        String profileTitle = getActiveProfileString("gui-title", "");
+        if (profileTitle != null && !profileTitle.isBlank()) {
+            return profileTitle;
+        }
+        return gui(player).getString("gui.title", "&6Lottery");
     }
 
     public void handleMenuClick(Player player, String title, int slot) {
@@ -2343,6 +2467,16 @@ public final class LotteryManager {
         boolean profilePage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("profile-gui.title", "&6Lotterie auswählen")));
         boolean editorPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("editor-gui.title", "&dGUI Editor")));
         boolean adminOverviewPage = title.equals(MessageUtil.color(plugin.getGuiConfig().getString("admin-overview-gui.title", "&cAdmin Übersicht")));
+        FileConfiguration localizedGui = gui(player);
+        statsPage = statsPage || title.equals(MessageUtil.color(localizedGui.getString("stats-gui.title", "&6Lottery Statistik")));
+        personalStatsPage = personalStatsPage || title.equals(MessageUtil.color(localizedGui.getString("personal-stats-gui.title", "&6Deine Statistik")));
+        winnerWallPage = winnerWallPage || title.equals(MessageUtil.color(localizedGui.getString("winner-wall-gui.title", "&6Gewinnerwand")));
+        languagePage = languagePage || title.equals(MessageUtil.color(localizedGui.getString("language-gui.title", "&6Sprache")));
+        adminPage = adminPage || title.equals(MessageUtil.color(localizedGui.getString("admin-gui.title", "&cLotterie Admin")));
+        profilePage = profilePage || title.equals(MessageUtil.color(localizedGui.getString("profile-gui.title", "&6Lotterie auswaehlen")));
+        editorPage = editorPage || title.equals(MessageUtil.color(localizedGui.getString("editor-gui.title", "&dGUI Editor")));
+        adminOverviewPage = adminOverviewPage || title.equals(MessageUtil.color(localizedGui.getString("admin-overview-gui.title", "&cAdmin Uebersicht")));
+
         if (profilePage) {
             handleProfileMenuClick(player, slot);
             return;
@@ -2360,6 +2494,15 @@ public final class LotteryManager {
                 openStatsMenu(player);
             }
             return;
+        }
+        if (languagePage) {
+            String detectedLanguage = getDetectedLanguageBySlot(player, slot);
+            if (!detectedLanguage.isBlank()) {
+                plugin.setPlayerLanguage(player.getUniqueId(), detectedLanguage);
+                MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.language-changed");
+                openMenu(player);
+                return;
+            }
         }
         String itemRoot = statsPage ? "stats-gui.items" : personalStatsPage ? "personal-stats-gui.items" : languagePage ? "language-gui.items"
             : adminPage ? "admin-gui.items" : "gui.items";
@@ -2391,20 +2534,21 @@ public final class LotteryManager {
     }
 
     public void openStatsMenu(Player player) {
-        if (!plugin.getGuiConfig().getBoolean("stats-gui.enabled", true)) {
+        FileConfiguration gui = gui(player);
+        if (!gui.getBoolean("stats-gui.enabled", true)) {
             openMenu(player);
             return;
         }
 
-        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("stats-gui.size", 54),
-            MessageUtil.color(plugin.getGuiConfig().getString("stats-gui.title", "&6Lottery Statistik")));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("stats-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+        Inventory inventory = Bukkit.createInventory(null, gui.getInt("stats-gui.size", 54),
+            MessageUtil.color(gui.getString("stats-gui.title", "&6Lottery Statistik")));
+        Material fillerMaterial = parseMaterial(gui.getString("stats-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
 
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection("stats-gui.items");
+        ConfigurationSection itemsSection = gui.getConfigurationSection("stats-gui.items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
                 setConfiguredItem(inventory, player, "stats-gui.items." + key);
@@ -2415,10 +2559,11 @@ public final class LotteryManager {
     }
 
     public void openWinnerWall(Player player) {
-        int size = plugin.getGuiConfig().getInt("winner-wall-gui.size", 54);
+        FileConfiguration gui = gui(player);
+        int size = gui.getInt("winner-wall-gui.size", 54);
         Inventory inventory = Bukkit.createInventory(null, size,
-            MessageUtil.color(plugin.getGuiConfig().getString("winner-wall-gui.title", "&6Gewinnerwand")));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("winner-wall-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+            MessageUtil.color(gui.getString("winner-wall-gui.title", "&6Gewinnerwand")));
+        Material fillerMaterial = parseMaterial(gui.getString("winner-wall-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
@@ -2438,7 +2583,7 @@ public final class LotteryManager {
             inventory.setItem(22, createItem(Material.BARRIER, "&cNoch keine Gewinner", "&7Nach der ersten Ziehung füllt sich diese Wand."));
         }
 
-        int backSlot = plugin.getGuiConfig().getInt("winner-wall-gui.back-slot", 49);
+        int backSlot = gui.getInt("winner-wall-gui.back-slot", 49);
         if (backSlot >= 0 && backSlot < inventory.getSize()) {
             inventory.setItem(backSlot, createItem(Material.ARROW, "&aZurück", "&7Zurück zur Statistik."));
         }
@@ -2446,20 +2591,21 @@ public final class LotteryManager {
     }
 
     public void openPersonalStatsMenu(Player player) {
-        if (!plugin.getGuiConfig().getBoolean("personal-stats-gui.enabled", true)) {
+        FileConfiguration gui = gui(player);
+        if (!gui.getBoolean("personal-stats-gui.enabled", true)) {
             openMenu(player);
             return;
         }
 
-        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("personal-stats-gui.size", 27),
-            MessageUtil.color(plugin.getGuiConfig().getString("personal-stats-gui.title", "&6Deine Statistik")));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("personal-stats-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+        Inventory inventory = Bukkit.createInventory(null, gui.getInt("personal-stats-gui.size", 27),
+            MessageUtil.color(gui.getString("personal-stats-gui.title", "&6Deine Statistik")));
+        Material fillerMaterial = parseMaterial(gui.getString("personal-stats-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
 
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection("personal-stats-gui.items");
+        ConfigurationSection itemsSection = gui.getConfigurationSection("personal-stats-gui.items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
                 setConfiguredItem(inventory, player, "personal-stats-gui.items." + key);
@@ -2470,22 +2616,84 @@ public final class LotteryManager {
     }
 
     public void openLanguageMenu(Player player) {
-        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("language-gui.size", 27),
-            MessageUtil.color(plugin.getGuiConfig().getString("language-gui.title", "&6Sprache")));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("language-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
+        FileConfiguration gui = gui(player);
+        Inventory inventory = Bukkit.createInventory(null, gui.getInt("language-gui.size", 27),
+            MessageUtil.color(gui.getString("language-gui.title", "&6Sprache")));
+        Material fillerMaterial = parseMaterial(gui.getString("language-gui.filler-material", "BLACK_STAINED_GLASS_PANE"), Material.BLACK_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
 
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection("language-gui.items");
+        ConfigurationSection itemsSection = gui.getConfigurationSection("language-gui.items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
                 setConfiguredItem(inventory, player, "language-gui.items." + key);
             }
         }
 
+        if (gui.getBoolean("language-gui.auto-detect.enabled", true)) {
+            addDetectedLanguageItems(inventory, player, gui);
+        }
+
         player.openInventory(inventory);
+    }
+
+    private void addDetectedLanguageItems(Inventory inventory, Player player, FileConfiguration gui) {
+        List<Integer> slots = getDetectedLanguageSlots(gui);
+        if (slots.isEmpty()) {
+            return;
+        }
+
+        List<String> languages = plugin.getAvailableLanguages().stream().sorted().toList();
+        for (int index = 0; index < languages.size() && index < slots.size(); index++) {
+            int slot = slots.get(index);
+            if (slot < 0 || slot >= inventory.getSize()) {
+                continue;
+            }
+            String language = languages.get(index);
+            Map<String, String> placeholders = createCommonPlaceholders(player);
+            placeholders.put("language", language);
+            placeholders.put("language_name", plugin.getLanguageDisplayName(language));
+            placeholders.put("selected", language.equalsIgnoreCase(plugin.getPlayerLanguage(player.getUniqueId())) ? "ausgewaehlt" : "");
+
+            Material material = parseMaterial(gui.getString("language-gui.auto-detect.material", "LIME_DYE"), Material.LIME_DYE);
+            String name = MessageUtil.raw(player, gui, "language-gui.auto-detect.name", placeholders);
+            List<String> lore = MessageUtil.rawList(player, gui, "language-gui.auto-detect.lore", placeholders);
+            inventory.setItem(slot, createItem(material, name, lore.toArray(String[]::new)));
+        }
+    }
+
+    private String getDetectedLanguageBySlot(Player player, int clickedSlot) {
+        FileConfiguration gui = gui(player);
+        if (!gui.getBoolean("language-gui.auto-detect.enabled", true)) {
+            return "";
+        }
+        List<Integer> slots = getDetectedLanguageSlots(gui);
+        List<String> languages = plugin.getAvailableLanguages().stream().sorted().toList();
+        for (int index = 0; index < languages.size() && index < slots.size(); index++) {
+            if (slots.get(index) == clickedSlot) {
+                return languages.get(index);
+            }
+        }
+        return "";
+    }
+
+    private List<Integer> getDetectedLanguageSlots(FileConfiguration gui) {
+        List<Integer> slots = new ArrayList<>();
+        List<?> configuredSlots = gui.getList("language-gui.auto-detect.slots", List.of(10, 11, 12, 13, 14, 15, 16));
+        for (Object entry : configuredSlots) {
+            if (entry instanceof Number number) {
+                slots.add(number.intValue());
+            } else {
+                try {
+                    slots.add(Integer.parseInt(String.valueOf(entry).trim()));
+                } catch (NumberFormatException exception) {
+                    plugin.getLogger().warning("Invalid language GUI auto slot: " + entry);
+                }
+            }
+        }
+        return slots;
     }
 
     public void openAdminMenu(Player player) {
@@ -2493,20 +2701,21 @@ public final class LotteryManager {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.no-permission");
             return;
         }
-        if (!plugin.getGuiConfig().getBoolean("admin-gui.enabled", true)) {
+        FileConfiguration gui = gui(player);
+        if (!gui.getBoolean("admin-gui.enabled", true)) {
             showStatus(player);
             return;
         }
 
-        Inventory inventory = Bukkit.createInventory(null, plugin.getGuiConfig().getInt("admin-gui.size", 27),
-            MessageUtil.color(plugin.getGuiConfig().getString("admin-gui.title", "&cLotterie Admin")));
-        Material fillerMaterial = parseMaterial(plugin.getGuiConfig().getString("admin-gui.filler-material", "RED_STAINED_GLASS_PANE"), Material.RED_STAINED_GLASS_PANE);
+        Inventory inventory = Bukkit.createInventory(null, gui.getInt("admin-gui.size", 27),
+            MessageUtil.color(gui.getString("admin-gui.title", "&cLotterie Admin")));
+        Material fillerMaterial = parseMaterial(gui.getString("admin-gui.filler-material", "RED_STAINED_GLASS_PANE"), Material.RED_STAINED_GLASS_PANE);
         ItemStack filler = createItem(fillerMaterial, "&0");
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
 
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection("admin-gui.items");
+        ConfigurationSection itemsSection = gui.getConfigurationSection("admin-gui.items");
         if (itemsSection != null) {
             for (String key : itemsSection.getKeys(false)) {
                 setConfiguredItem(inventory, player, "admin-gui.items." + key);
@@ -3358,7 +3567,11 @@ public final class LotteryManager {
         PayoutTaxResult payoutTax = applyPayoutTax(grossAmount);
         double amount = payoutTax.netAmount();
         int totalTickets = currentRound().getTotalTickets();
-        List<WinnerPayout> winnerPayouts = createWinnerPayouts(amount);
+        FairDrawContext fairDraw = createFairDrawContext(drawKey);
+        if (fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-hash-before-draw", true)) {
+            broadcastConfigured("messages.fairness-hash", fairDraw.placeholders());
+        }
+        List<WinnerPayout> winnerPayouts = createWinnerPayouts(amount, fairDraw.random());
 
         setLastDrawKey(drawKey);
         for (UUID playerId : currentRound().getTicketsByPlayer().keySet()) {
@@ -3389,6 +3602,7 @@ public final class LotteryManager {
         placeholders.put("chance", formatChance((double) mainWinner.tickets() / Math.max(1, totalTickets)));
         placeholders.put("winner_count", String.valueOf(winnerPayouts.size()));
         placeholders.put("winners", formatWinnerPayouts(winnerPayouts));
+        placeholders.putAll(fairDraw.placeholders());
         Player onlineWinner = Bukkit.getPlayer(mainWinner.playerId());
         long winnerDelay = runDrawAnimation(placeholders);
         runGuiDrawAnimation(winnerPayouts, winnerDelay);
@@ -3400,6 +3614,9 @@ public final class LotteryManager {
                 broadcastConfigured("messages.draw-winners", placeholders, onlineWinner);
             } else {
                 broadcastConfigured("messages.draw-winner", placeholders, onlineWinner);
+            }
+            if (fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-proof-after-draw", true)) {
+                broadcastConfigured("messages.fairness-proof", placeholders, onlineWinner);
             }
             for (WinnerPayout payout : winnerPayouts) {
                 broadcastConfigured("messages.winner-congratulation", createWinnerPlaceholders(payout, amount, totalTickets), Bukkit.getPlayer(payout.playerId()));
@@ -3425,12 +3642,37 @@ public final class LotteryManager {
                 "lottery", getActiveLotteryId()
             ));
         }
+        saveRollbackSnapshot(drawKey, fairDraw, winnerPayouts);
         currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
         clearRoundReminderState();
         save();
         appendLog("draw_winner", placeholders);
         runAutoBackupAfterDraw();
         return new DrawResult(forced, "messages.admin-draw-success", placeholders);
+    }
+
+    private void saveRollbackSnapshot(String drawKey, FairDrawContext fairDraw, List<WinnerPayout> winnerPayouts) {
+        String root = "rollback.last";
+        dataConfig.set(root, null);
+        dataConfig.set(root + ".lottery", getActiveLotteryId());
+        dataConfig.set(root + ".draw-key", drawKey);
+        dataConfig.set(root + ".created-at", LocalDateTime.now(getZoneId()).toString());
+        dataConfig.set(root + ".fair.seed", fairDraw.seed());
+        dataConfig.set(root + ".fair.hash", fairDraw.hash());
+        dataConfig.set(root + ".round.jackpot", currentRound().getJackpot());
+        dataConfig.set(root + ".round.started-at", currentRound().getStartedAt().toString());
+        for (Map.Entry<UUID, Integer> entry : currentRound().getTicketsByPlayer().entrySet()) {
+            dataConfig.set(root + ".round.tickets." + entry.getKey(), entry.getValue());
+            dataConfig.set(root + ".round.spent." + entry.getKey(), currentRound().getSpentFor(entry.getKey()));
+        }
+        for (int index = 0; index < winnerPayouts.size(); index++) {
+            WinnerPayout payout = winnerPayouts.get(index);
+            String path = root + ".payouts." + index;
+            dataConfig.set(path + ".uuid", payout.playerId().toString());
+            dataConfig.set(path + ".name", payout.playerName());
+            dataConfig.set(path + ".amount", payout.amount());
+            dataConfig.set(path + ".tickets", payout.tickets());
+        }
     }
 
     private void runAutoBackupAfterDraw() {
@@ -4055,13 +4297,57 @@ public final class LotteryManager {
         throw new IllegalStateException("Could not resolve lottery winner.");
     }
 
+    private FairDrawContext createFairDrawContext(String drawKey) {
+        if (!plugin.getConfig().getBoolean("fairness.enabled", true)) {
+            return new FairDrawContext(false, "", "", drawKey, random);
+        }
+
+        String seed = UUID.randomUUID() + "-" + System.nanoTime();
+        String hash = sha256(seed);
+        String ticketSnapshot = currentRound().getTicketsByPlayer().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(entry -> entry.getKey() + ":" + entry.getValue())
+            .reduce("", (left, right) -> left + "|" + right);
+        long randomSeed = bytesToLong(sha256Bytes(seed + "|" + drawKey + "|" + ticketSnapshot));
+        return new FairDrawContext(true, seed, hash, drawKey, new Random(randomSeed));
+    }
+
+    private static long bytesToLong(byte[] bytes) {
+        long value = 0L;
+        for (int index = 0; index < Math.min(8, bytes.length); index++) {
+            value = (value << 8) | (bytes[index] & 0xffL);
+        }
+        return value;
+    }
+
+    private static String sha256(String value) {
+        byte[] bytes = sha256Bytes(value);
+        StringBuilder builder = new StringBuilder(bytes.length * 2);
+        for (byte current : bytes) {
+            builder.append(String.format(Locale.ROOT, "%02x", current));
+        }
+        return builder.toString();
+    }
+
+    private static byte[] sha256Bytes(String value) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available.", exception);
+        }
+    }
+
     private List<WinnerPayout> createWinnerPayouts(double totalAmount) {
+        return createWinnerPayouts(totalAmount, random);
+    }
+
+    private List<WinnerPayout> createWinnerPayouts(double totalAmount, Random drawRandom) {
         if (plugin.getConfig().getBoolean("winners.fixed-payouts-enabled", false)) {
-            return createFixedWinnerPayouts(totalAmount);
+            return createFixedWinnerPayouts(totalAmount, drawRandom);
         }
 
         List<Double> shares = getPrizeShares();
-        List<UUID> winners = pickUniqueWinners(shares.size());
+        List<UUID> winners = pickUniqueWinners(shares.size(), drawRandom);
         double totalShare = 0.0D;
         for (int index = 0; index < winners.size(); index++) {
             totalShare += shares.get(Math.min(index, shares.size() - 1));
@@ -4077,7 +4363,7 @@ public final class LotteryManager {
         return payouts;
     }
 
-    private List<WinnerPayout> createFixedWinnerPayouts(double totalAmount) {
+    private List<WinnerPayout> createFixedWinnerPayouts(double totalAmount, Random drawRandom) {
         List<Double> configuredPayouts = new ArrayList<>();
         for (Double payout : plugin.getConfig().getDoubleList("winners.fixed-payouts")) {
             if (payout != null && payout > 0.0D) {
@@ -4088,7 +4374,7 @@ public final class LotteryManager {
             configuredPayouts.add(totalAmount);
         }
 
-        List<UUID> winners = pickUniqueWinners(configuredPayouts.size());
+        List<UUID> winners = pickUniqueWinners(configuredPayouts.size(), drawRandom);
         boolean capToPot = plugin.getConfig().getBoolean("winners.fixed-payouts-cap-to-pot", true);
         boolean addLeftoverToFirst = plugin.getConfig().getBoolean("winners.fixed-payouts-add-leftover-to-first", true);
         List<Double> payoutAmounts = new ArrayList<>();
@@ -4128,11 +4414,15 @@ public final class LotteryManager {
     }
 
     private List<UUID> pickUniqueWinners(int wantedWinners) {
+        return pickUniqueWinners(wantedWinners, random);
+    }
+
+    private List<UUID> pickUniqueWinners(int wantedWinners, Random drawRandom) {
         Map<UUID, Integer> candidates = new HashMap<>(currentRound().getTicketsByPlayer());
         List<UUID> winners = new ArrayList<>();
         int limit = Math.min(Math.max(1, wantedWinners), candidates.size());
         for (int index = 0; index < limit; index++) {
-            UUID winner = pickWinnerFromCandidates(candidates);
+            UUID winner = pickWinnerFromCandidates(candidates, drawRandom);
             winners.add(winner);
             candidates.remove(winner);
         }
@@ -4140,8 +4430,12 @@ public final class LotteryManager {
     }
 
     private UUID pickWinnerFromCandidates(Map<UUID, Integer> candidates) {
+        return pickWinnerFromCandidates(candidates, random);
+    }
+
+    private UUID pickWinnerFromCandidates(Map<UUID, Integer> candidates, Random drawRandom) {
         int totalTickets = candidates.values().stream().mapToInt(Integer::intValue).sum();
-        int winningNumber = random.nextInt(totalTickets) + 1;
+        int winningNumber = drawRandom.nextInt(totalTickets) + 1;
         int cursor = 0;
         for (Map.Entry<UUID, Integer> entry : candidates.entrySet()) {
             cursor += entry.getValue();
@@ -5121,15 +5415,16 @@ public final class LotteryManager {
             return;
         }
 
+        FileConfiguration gui = gui(player);
         Map<String, String> placeholders = createItemPlaceholders(player, path);
-        List<Integer> slots = getGuiSlots(path);
+        List<Integer> slots = getGuiSlots(player, path);
         if (slots.isEmpty()) {
             return;
         }
 
-        Material material = parseMaterial(plugin.getGuiConfig().getString(path + ".material", "STONE"), Material.STONE);
-        String name = MessageUtil.raw(player, plugin.getGuiConfig(), path + ".name", placeholders);
-        List<String> lore = expandStatsLore(MessageUtil.rawList(player, plugin.getGuiConfig(), path + ".lore", placeholders));
+        Material material = parseMaterial(gui.getString(path + ".material", "STONE"), Material.STONE);
+        String name = MessageUtil.raw(player, gui, path + ".name", placeholders);
+        List<String> lore = expandStatsLore(MessageUtil.rawList(player, gui, path + ".lore", placeholders));
         ItemStack item = createHeadDatabaseItem(player, path, placeholders, name, lore);
         if (item == null) {
             item = createItem(material, name, lore.toArray(String[]::new));
@@ -5145,19 +5440,27 @@ public final class LotteryManager {
 
     private Map<String, String> createItemPlaceholders(Player player, String path) {
         Map<String, String> placeholders = createCommonPlaceholders(player);
-        int buyAmount = getConfiguredBuyAmount(path);
+        int buyAmount = getConfiguredBuyAmount(player, path);
         placeholders.put("buy_amount", String.valueOf(buyAmount));
         placeholders.put("buy_price", economyService.format(calculateTicketCost(buyAmount)));
         return placeholders;
     }
 
+    private List<Integer> getGuiSlots(Player player, String path) {
+        return getGuiSlots(gui(player), path);
+    }
+
     private List<Integer> getGuiSlots(String path) {
+        return getGuiSlots(plugin.getGuiConfig(), path);
+    }
+
+    private List<Integer> getGuiSlots(FileConfiguration gui, String path) {
         List<Integer> slots = new ArrayList<>();
-        if (plugin.getGuiConfig().isInt(path + ".slot")) {
-            slots.add(plugin.getGuiConfig().getInt(path + ".slot"));
+        if (gui.isInt(path + ".slot")) {
+            slots.add(gui.getInt(path + ".slot"));
         }
 
-        for (Object entry : plugin.getGuiConfig().getList(path + ".slots", List.of())) {
+        for (Object entry : gui.getList(path + ".slots", List.of())) {
             if (entry instanceof Number number) {
                 slots.add(number.intValue());
                 continue;
@@ -5416,7 +5719,8 @@ public final class LotteryManager {
     }
 
     private String findItemPathBySlot(Player player, String itemsPath, int clickedSlot) {
-        ConfigurationSection itemsSection = plugin.getGuiConfig().getConfigurationSection(itemsPath);
+        FileConfiguration gui = gui(player);
+        ConfigurationSection itemsSection = gui.getConfigurationSection(itemsPath);
         if (itemsSection == null) {
             return null;
         }
@@ -5427,7 +5731,7 @@ public final class LotteryManager {
             if (!isGuiItemVisible(player, path)) {
                 continue;
             }
-            if (getGuiSlots(path).contains(clickedSlot)) {
+            if (getGuiSlots(gui, path).contains(clickedSlot)) {
                 matchingPath = path;
             }
         }
@@ -5435,20 +5739,21 @@ public final class LotteryManager {
     }
 
     private boolean isGuiItemVisible(Player player, String path) {
-        String permission = plugin.getGuiConfig().getString(path + ".permission",
-            plugin.getGuiConfig().getString(path + ".view-permission", ""));
+        FileConfiguration gui = gui(player);
+        String permission = gui.getString(path + ".permission",
+            gui.getString(path + ".view-permission", ""));
         if (permission == null || permission.isBlank()) {
-            permission = inferGuiItemPermission(path);
+            permission = inferGuiItemPermission(player, path);
         }
 
         if (permission == null || permission.isBlank() || player.hasPermission(permission)) {
             return true;
         }
-        return !plugin.getGuiConfig().getBoolean(path + ".hide-without-permission", true);
+        return !gui.getBoolean(path + ".hide-without-permission", true);
     }
 
-    private String inferGuiItemPermission(String path) {
-        for (String action : plugin.getGuiConfig().getStringList(path + ".actions")) {
+    private String inferGuiItemPermission(Player player, String path) {
+        for (String action : gui(player).getStringList(path + ".actions")) {
             String normalizedAction = action.trim().toLowerCase(Locale.ROOT);
             if (normalizedAction.equals("open-admin")
                 || normalizedAction.equals("player:/lottery admin")
@@ -5462,12 +5767,13 @@ public final class LotteryManager {
     }
 
     private boolean handleItemActions(Player player, String path) {
+        FileConfiguration gui = gui(player);
         Map<String, String> placeholders = createItemPlaceholders(player, path);
-        boolean refresh = plugin.getGuiConfig().getBoolean(path + ".refresh-after-click", true);
+        boolean refresh = gui.getBoolean(path + ".refresh-after-click", true);
         boolean handledAction = false;
 
-        List<String> actions = plugin.getGuiConfig().getStringList(path + ".actions");
-        if (actions.isEmpty() && getConfiguredBuyAmount(path) > 0) {
+        List<String> actions = gui.getStringList(path + ".actions");
+        if (actions.isEmpty() && getConfiguredBuyAmount(player, path) > 0) {
             actions = List.of("buy:%buy_amount%");
         }
 
@@ -5596,6 +5902,19 @@ public final class LotteryManager {
         return handledAction && refresh;
     }
 
+    private int getConfiguredBuyAmount(Player player, String path) {
+        int configuredAmount = gui(player).getInt(path + ".buy-amount", 0);
+        if (configuredAmount > 0) {
+            return configuredAmount;
+        }
+
+        String key = path.substring(path.lastIndexOf('.') + 1);
+        if (key.startsWith("buy-")) {
+            return parsePositiveInt(key.substring("buy-".length()), 0);
+        }
+        return 0;
+    }
+
     private int getConfiguredBuyAmount(String path) {
         int configuredAmount = plugin.getGuiConfig().getInt(path + ".buy-amount", 0);
         if (configuredAmount > 0) {
@@ -5614,7 +5933,7 @@ public final class LotteryManager {
             return;
         }
 
-        String owner = plugin.getGuiConfig().getString(path + ".skull-owner", "%player_name%");
+        String owner = gui(player).getString(path + ".skull-owner", "%player_name%");
         owner = MessageUtil.format(player, owner, placeholders);
         if (!owner.isBlank()) {
             skullMeta.setOwningPlayer(Bukkit.getOfflinePlayer(owner));
@@ -5664,8 +5983,9 @@ public final class LotteryManager {
     }
 
     private ItemStack createHeadDatabaseItem(Player player, String path, Map<String, String> placeholders, String name, List<String> lore) {
-        String headId = plugin.getGuiConfig().getString(path + ".head-database-id",
-            plugin.getGuiConfig().getString(path + ".hdb-id", ""));
+        FileConfiguration gui = gui(player);
+        String headId = gui.getString(path + ".head-database-id",
+            gui.getString(path + ".hdb-id", ""));
         headId = MessageUtil.format(player, headId, placeholders);
         if (headId.isBlank()) {
             return null;
@@ -5722,6 +6042,16 @@ public final class LotteryManager {
     }
 
     private record WinnerPayout(int rank, UUID playerId, String playerName, double amount, int tickets) {
+    }
+
+    private record FairDrawContext(boolean enabled, String seed, String hash, String drawKey, Random random) {
+        private Map<String, String> placeholders() {
+            return Map.of(
+                "fair_seed", seed == null ? "" : seed,
+                "fair_hash", hash == null ? "" : hash,
+                "fair_draw_key", drawKey == null ? "" : drawKey
+            );
+        }
     }
 
     private record PendingPayment(

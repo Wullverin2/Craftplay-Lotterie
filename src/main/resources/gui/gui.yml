@@ -46,7 +46,7 @@ gui:
     buy-medium:
       slot: 11
       material: "GOLD_INGOT"
-      buy-amount: 5
+      buy-amount: 1
       refresh-after-click: true
       name: "&e%buy_amount% Tickets kaufen"
       lore:
@@ -71,7 +71,7 @@ gui:
     buy-large:
       slot: 15
       material: "GOLD_BLOCK"
-      buy-amount: 10
+      buy-amount: 1
       refresh-after-click: true
       name: "&e%buy_amount% Tickets kaufen"
       lore:
@@ -84,7 +84,7 @@ gui:
     buy-very-large:
       slot: 16
       material: "EMERALD"
-      buy-amount: 25
+      buy-amount: 1
       refresh-after-click: true
       name: "&e%buy_amount% Tickets kaufen"
       lore:
@@ -327,24 +327,27 @@ language-gui:
   size: 27
   # DE: Füllmaterial im Sprachmenü. EN: Filler material in the language menu.
   filler-material: "LIGHT_BLUE_STAINED_GLASS_PANE"
+  auto-detect:
+    # DE: Erkennt alle Dateien aus lang/<sprache>.yml automatisch und zeigt sie als Sprachbuttons.
+    # EN: Automatically detects all files from lang/<language>.yml and shows them as language buttons.
+    enabled: true
+    # DE: Slots für automatisch erkannte Sprachen, in dieser Reihenfolge.
+    # EN: Slots for automatically detected languages, in this order.
+    slots: [10, 11, 12, 13, 14, 15, 16]
+    # DE: Material für automatisch erzeugte Sprachbuttons.
+    # EN: Material for automatically generated language buttons.
+    material: "LIME_DYE"
+    # DE: Name des automatisch erzeugten Sprachbuttons.
+    # EN: Name of the automatically generated language button.
+    name: "&a%language_name%"
+    # DE: Lore des automatisch erzeugten Sprachbuttons.
+    # EN: Lore of the automatically generated language button.
+    lore:
+      - "&7Sprachcode: &f%language%"
+      - "&7%selected%"
+      - "&aKlicken zum Auswählen"
   # DE: Buttons zum Wechseln der Sprache. EN: Buttons for changing language.
   items:
-    german:
-      slot: 11
-      material: "LIME_DYE"
-      name: "&aDeutsch"
-      lore:
-        - "&7Stellt deine Sprache auf Deutsch."
-      actions:
-        - "language:de"
-    english:
-      slot: 15
-      material: "BLUE_DYE"
-      name: "&bEnglish"
-      lore:
-        - "&7Sets your language to English."
-      actions:
-        - "language:en"
     back:
       slot: 22
       material: "ARROW"

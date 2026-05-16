@@ -10,7 +10,7 @@ description: Craftplay Lotterie with GUI, PlaceholderAPI and webhook support.
 commands:
   lottery:
     description: Main command for the lottery plugin
-    usage: /lottery [help|buy|free|shop|gui|profile|reminders|winnerwall|jackpot|winners|stats|nextdraw|draw|simulate|reload|setjackpot|addjackpot|reset|info|admin|adminstats|taxreport|notifications|payments|backup|export|audit|web|import|debug|doctor|log|setupwizard|setup|season|preview|editor|lotteries|transactions|grantfree|updateconfigs|updatecheck]
+    usage: /lottery [help|buy|free|shop|gui|profile|reminders|winnerwall|jackpot|winners|stats|nextdraw|draw|simulate|reload|setjackpot|addjackpot|reset|rollback|info|admin|adminstats|taxreport|notifications|payments|backup|export|audit|web|import|debug|doctor|log|setupwizard|setup|season|preview|editor|lotteries|transactions|grantfree|updateconfigs|updatecheck]
     aliases: [lot]
 
 permissions:
@@ -19,4 +19,33 @@ permissions:
     default: true
   lottery.admin:
     description: Allows admin lottery actions
+    default: op
+    children:
+      lottery.admin.draw: true
+      lottery.admin.reload: true
+      lottery.admin.rollback: true
+      lottery.admin.backup: true
+      lottery.admin.hologram: true
+      lottery.admin.stats: true
+      lottery.admin.release: true
+  lottery.admin.draw:
+    description: Allows forcing or simulating lottery draws
+    default: op
+  lottery.admin.reload:
+    description: Allows reloading the lottery plugin
+    default: op
+  lottery.admin.rollback:
+    description: Allows rolling back the last draw snapshot
+    default: op
+  lottery.admin.backup:
+    description: Allows creating lottery backups
+    default: op
+  lottery.admin.hologram:
+    description: Allows managing lottery holograms
+    default: op
+  lottery.admin.stats:
+    description: Allows viewing admin statistics and reports
+    default: op
+  lottery.admin.release:
+    description: Allows checking for plugin releases
     default: op
