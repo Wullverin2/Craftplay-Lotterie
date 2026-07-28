@@ -6600,6 +6600,10 @@ public final class LotteryManager {
 
     private boolean isGuiItemVisible(Player player, String path) {
         FileConfiguration gui = gui(player);
+        if (!gui.getBoolean(path + ".enabled", true)) {
+            return false;
+        }
+
         String permission = gui.getString(path + ".permission",
             gui.getString(path + ".view-permission", ""));
         if (permission == null || permission.isBlank()) {

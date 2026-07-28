@@ -2,11 +2,11 @@
 # DE: Diese Datei steuert alle Inventar-Menüs. Texte unterstützen Farbcodes (&) und PlaceholderAPI-Platzhalter.
 # EN: This file controls all inventory menus. Texts support color codes (&) and PlaceholderAPI placeholders.
 # DE: Gemeinsame Item-Einstellungen:
-# DE: slot = einzelner Platz, slots = mehrere Plätze/Ranges, material = Bukkit-Material, head-database-id = HeadDatabase-Kopf,
+# DE: enabled = Button anzeigen/ausblenden, slot = einzelner Platz, slots = mehrere Plätze/Ranges, material = Bukkit-Material, head-database-id = HeadDatabase-Kopf,
 # DE: skull-owner = Spielername für Player-Heads, name/lore = Anzeige, buy-amount = Ticketmenge am Kaufbutton,
 # DE: refresh-after-click = GUI nach Klick aktualisieren, actions = Klickaktionen.
 # EN: Shared item settings:
-# EN: slot = one slot, slots = multiple slots/ranges, material = Bukkit material, head-database-id = HeadDatabase head,
+# EN: enabled = show/hide button, slot = one slot, slots = multiple slots/ranges, material = Bukkit material, head-database-id = HeadDatabase head,
 # EN: skull-owner = player name for player heads, name/lore = display, buy-amount = ticket amount on buy buttons,
 # EN: refresh-after-click = refresh GUI after click, actions = click actions.
 # DE: Aktionen: buy:<anzahl>, close, open-stats, open-personal-stats, open-album, open-claims,
@@ -28,11 +28,13 @@ gui:
   # DE: Alle Buttons/Dekoitems des Hauptmenüs. EN: All buttons/decorative items in the main menu.
   items:
     top-decoration:
+      enabled: true
       slots: ["0-8", 27, 28, 29, 30, 32, 33]
       material: "YELLOW_STAINED_GLASS_PANE"
       name: "&6"
       lore: []
     buy-small:
+      enabled: true
       slot: 10
       material: "GOLD_NUGGET"
       buy-amount: 1
@@ -46,6 +48,7 @@ gui:
       actions:
         - "buy:%buy_amount%"
     buy-medium:
+      enabled: true
       slot: 11
       material: "GOLD_INGOT"
       buy-amount: 1
@@ -59,6 +62,7 @@ gui:
       actions:
         - "buy:%buy_amount%"
     pot-info:
+      enabled: true
       slot: 13
       material: "CHEST"
       name: "&6Aktueller Topf"
@@ -71,6 +75,7 @@ gui:
         - "&7Nächste Ziehung: &f%next_draw%"
       actions: []
     buy-large:
+      enabled: true
       slot: 15
       material: "GOLD_BLOCK"
       buy-amount: 1
@@ -84,6 +89,7 @@ gui:
       actions:
         - "buy:%buy_amount%"
     buy-very-large:
+      enabled: true
       slot: 16
       material: "EMERALD"
       buy-amount: 1
@@ -97,6 +103,7 @@ gui:
       actions:
         - "buy:%buy_amount%"
     player-head:
+      enabled: true
       slot: 22
       material: "PLAYER_HEAD"
       skull-owner: "%player_name%"
@@ -110,6 +117,7 @@ gui:
         - "&7Quest Fortschritt: &f%quests_player_current_quest_names%"
       actions: []
     free-ticket:
+      enabled: false
       slot: 23
       material: "TRIPWIRE_HOOK"
       name: "&aKostenloses Ticket"
@@ -120,6 +128,7 @@ gui:
       actions:
         - "player:/lottery free"
     season-shop:
+      enabled: false
       slot: 24
       material: "SUNFLOWER"
       name: "&eSaison-Shop"
@@ -130,6 +139,7 @@ gui:
       actions:
         - "player:/lottery shop"
     personal-statistics:
+      enabled: true
       slot: 30
       material: "PLAYER_HEAD"
       skull-owner: "%player_name%"
@@ -142,6 +152,7 @@ gui:
       actions:
         - "open-personal-stats"
     statistics:
+      enabled: true
       slot: 31
       material: "BOOK"
       name: "&6Statistik"
@@ -153,6 +164,7 @@ gui:
       actions:
         - "open-stats"
     language:
+      enabled: true
       slot: 32
       material: "WRITABLE_BOOK"
       name: "&bSprache"
@@ -162,6 +174,7 @@ gui:
       actions:
         - "open-language"
     album:
+      enabled: false
       slot: 36
       material: "BOOK"
       name: "&dTicket-Album"
@@ -172,6 +185,7 @@ gui:
       actions:
         - "open-album"
     claims:
+      enabled: false
       slot: 37
       material: "ENDER_CHEST"
       name: "&aGewinn-Briefkasten"
@@ -182,6 +196,7 @@ gui:
       actions:
         - "open-claims"
     lucky-number:
+      enabled: false
       slot: 38
       material: "AMETHYST_SHARD"
       name: "&dGlueckszahl"
@@ -192,6 +207,7 @@ gui:
       actions:
         - "message:&dNutze /lottery lucky <zahl>, um deine Glueckszahl zu setzen."
     watch-draw:
+      enabled: false
       slot: 39
       material: "SPYGLASS"
       name: "&6Ziehung ansehen"
@@ -202,6 +218,7 @@ gui:
       actions:
         - "watch-draw"
     profiles:
+      enabled: false
       slot: 40
       material: "MAP"
       name: "&bJackpot-Stufen"
@@ -212,6 +229,7 @@ gui:
       actions:
         - "open-profile"
     admin:
+      enabled: true
       slot: 34
       material: "COMMAND_BLOCK"
       name: "&cAdmin"
@@ -221,6 +239,7 @@ gui:
       actions:
         - "open-admin"
     close:
+      enabled: true
       slot: 35
       material: "BARRIER"
       name: "&cSchließen"
@@ -241,11 +260,13 @@ stats-gui:
   # DE: Buttons/Listen der Statistikseite. EN: Buttons/lists on the statistics page.
   items:
     decoration:
+      enabled: true
       slots: ["0-8", "45-53"]
       material: "YELLOW_STAINED_GLASS_PANE"
       name: "&6"
       lore: []
     most-played:
+      enabled: true
       slot: 10
       material: "CLOCK"
       name: "&eAm meisten mitgespielt"
@@ -253,6 +274,7 @@ stats-gui:
         - "%top_rounds_played%"
       actions: []
     most-tickets:
+      enabled: true
       slot: 11
       material: "PAPER"
       name: "&eMeiste gekaufte Tickets"
@@ -260,6 +282,7 @@ stats-gui:
         - "%top_tickets_bought%"
       actions: []
     most-spent:
+      enabled: true
       slot: 12
       material: "EMERALD"
       name: "&eGesamtausgaben"
@@ -267,6 +290,7 @@ stats-gui:
         - "%top_money_spent%"
       actions: []
     most-wins:
+      enabled: true
       slot: 14
       material: "NETHER_STAR"
       name: "&eAm häufigsten gewonnen"
@@ -274,6 +298,7 @@ stats-gui:
         - "%top_wins%"
       actions: []
     highest-win:
+      enabled: true
       slot: 15
       material: "GOLD_BLOCK"
       name: "&eHöchster Einzelgewinn"
@@ -281,6 +306,7 @@ stats-gui:
         - "%top_highest_win%"
       actions: []
     total-won:
+      enabled: true
       slot: 16
       material: "CHEST"
       name: "&eAlle Gewinne zusammen"
@@ -288,6 +314,7 @@ stats-gui:
         - "%top_total_won%"
       actions: []
     current-tickets:
+      enabled: true
       slot: 22
       material: "NAME_TAG"
       name: "&eAktuelle Runde"
@@ -295,6 +322,7 @@ stats-gui:
         - "%top_current_tickets%"
       actions: []
     last-winners:
+      enabled: true
       slot: 31
       material: "GOLDEN_APPLE"
       name: "&6Letzte 10 Gewinner"
@@ -302,6 +330,7 @@ stats-gui:
         - "%last_winners%"
       actions: []
     back:
+      enabled: true
       slot: 49
       material: "ARROW"
       name: "&aZurück"
@@ -322,11 +351,13 @@ personal-stats-gui:
   # DE: Buttons/Anzeigen der persönlichen Statistikseite. EN: Buttons/displays on the personal statistics page.
   items:
     decoration:
+      enabled: true
       slots: ["0-8", "27-35"]
       material: "LIGHT_BLUE_STAINED_GLASS_PANE"
       name: "&b"
       lore: []
     overview:
+      enabled: true
       slot: 13
       material: "PLAYER_HEAD"
       skull-owner: "%player_name%"
@@ -348,6 +379,7 @@ personal-stats-gui:
         - "&7Letzter Gewinn: &f%player_stats_last_win%"
       actions: []
     buy:
+      enabled: true
       slot: 21
       material: "GOLD_INGOT"
       buy-amount: 1
@@ -358,6 +390,7 @@ personal-stats-gui:
       actions:
         - "buy:%buy_amount%"
     back:
+      enabled: true
       slot: 31
       material: "ARROW"
       name: "&aZurück"
@@ -366,6 +399,7 @@ personal-stats-gui:
       actions:
         - "open-main"
     close:
+      enabled: true
       slot: 35
       material: "BARRIER"
       name: "&cSchließen"
@@ -405,6 +439,7 @@ language-gui:
   # DE: Buttons zum Wechseln der Sprache. EN: Buttons for changing language.
   items:
     back:
+      enabled: true
       slot: 22
       material: "ARROW"
       name: "&aZurück"
@@ -425,6 +460,7 @@ admin-gui:
   # DE: Admin-Buttons für Ziehung, Reload, Reset und Navigation. EN: Admin buttons for draw, reload, reset and navigation.
   items:
     status:
+      enabled: true
       slot: 10
       material: "CHEST"
       name: "&6Aktuelle Runde"
@@ -436,6 +472,7 @@ admin-gui:
         - "&7Offene Nachrichten: &f%pending_notifications%"
       actions: []
     force-draw:
+      enabled: true
       slot: 12
       material: "NETHER_STAR"
       name: "&eZiehung erzwingen"
@@ -444,6 +481,7 @@ admin-gui:
       actions:
         - "force-draw"
     simulate:
+      enabled: true
       slot: 11
       material: "ENDER_EYE"
       name: "&bTestziehung"
@@ -452,6 +490,7 @@ admin-gui:
       actions:
         - "player:/lottery simulate"
     notifications:
+      enabled: true
       slot: 14
       material: "PAPER"
       name: "&eOffline-Nachrichten"
@@ -460,6 +499,7 @@ admin-gui:
       actions:
         - "player:/lottery notifications list"
     log:
+      enabled: true
       slot: 15
       material: "BOOK"
       name: "&eAdmin-Log"
@@ -468,6 +508,7 @@ admin-gui:
       actions:
         - "player:/lottery log 1"
     reload:
+      enabled: true
       slot: 16
       material: "REDSTONE"
       name: "&aReload"
@@ -476,6 +517,7 @@ admin-gui:
       actions:
         - "reload-plugin"
     reset:
+      enabled: true
       slot: 22
       material: "TNT"
       name: "&cRunde zurücksetzen"
@@ -484,6 +526,7 @@ admin-gui:
       actions:
         - "reset-round"
     debug:
+      enabled: true
       slot: 23
       material: "COMPASS"
       name: "&bDebug"
@@ -492,6 +535,7 @@ admin-gui:
       actions:
         - "player:/lottery debug"
     doctor:
+      enabled: true
       slot: 20
       material: "SPYGLASS"
       name: "&aDoctor"
@@ -500,6 +544,7 @@ admin-gui:
       actions:
         - "player:/lottery doctor"
     backup:
+      enabled: true
       slot: 24
       material: "ENDER_CHEST"
       name: "&aBackup"
@@ -508,6 +553,7 @@ admin-gui:
       actions:
         - "player:/lottery backup"
     transactions:
+      enabled: true
       slot: 28
       material: "EMERALD"
       name: "&aTransaktionen"
@@ -517,6 +563,7 @@ admin-gui:
       actions:
         - "player:/lottery transactions 1"
     holograms:
+      enabled: true
       slot: 29
       material: "ARMOR_STAND"
       name: "&eHologramme"
@@ -525,6 +572,7 @@ admin-gui:
       actions:
         - "player:/lottery hologram list 1"
     lotteries:
+      enabled: true
       slot: 30
       material: "MAP"
       name: "&bLotterie-Profile"
@@ -533,6 +581,7 @@ admin-gui:
       actions:
         - "player:/lottery lotteries list"
     export-csv:
+      enabled: true
       slot: 31
       material: "PAPER"
       name: "&aCSV Export"
@@ -542,6 +591,7 @@ admin-gui:
       actions:
         - "player:/lottery export csv"
     placeholder-docs:
+      enabled: true
       slot: 32
       material: "WRITABLE_BOOK"
       name: "&dPlaceholder-Doku"
@@ -551,6 +601,7 @@ admin-gui:
       actions:
         - "message:&dDie Placeholder-Doku liegt im Plugin-Ordner als PLACEHOLDERS.md."
     season-reset:
+      enabled: true
       slot: 25
       material: "SUNFLOWER"
       name: "&eSaison zurücksetzen"
@@ -559,6 +610,7 @@ admin-gui:
       actions:
         - "player:/lottery season reset"
     back:
+      enabled: true
       slot: 49
       material: "ARROW"
       name: "&aZurück"
@@ -567,6 +619,7 @@ admin-gui:
       actions:
         - "open-main"
     close:
+      enabled: true
       slot: 53
       material: "BARRIER"
       name: "&cSchließen"
