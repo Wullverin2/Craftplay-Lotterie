@@ -97,6 +97,7 @@ messages:
   draw-winners: "&aThe lottery has &e%winner_count% &awinners: &e%winners%"
   winner-congratulation: "&6Congratulations &e%player%&6! You won the lottery pot of &e%amount%&6!"
   winner-offline-notification: "&6Congratulations! &aYou won the lottery while you were offline and received &e%amount%&a. Bought tickets: &e%tickets%&a."
+  draw-lost-offline: "&eWhile you were offline, the lottery was drawn. &7Winner: &e%winners%&7. You had &e%tickets% &7ticket(s) and did not win this time."
   fairness-hash: "&7Fairness proof: seed hash before draw: &e%fair_hash%"
   fairness-proof: "&7Fairness proof: seed &e%fair_seed% &7| hash &e%fair_hash% &7| draw &e%fair_draw_key%"
   admin-draw-success: "&aDraw completed. Winners: &e%winners%&a."

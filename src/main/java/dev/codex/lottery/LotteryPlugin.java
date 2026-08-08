@@ -36,7 +36,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 9;
+    private static final int CONFIG_VERSION = 10;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -378,9 +378,28 @@ public final class LotteryPlugin extends JavaPlugin {
             }
         }
 
+        applyConfigMigrations(currentVersion);
         getConfig().set("config-version", CONFIG_VERSION);
         saveConfig();
         getLogger().info("Config migrated to version " + CONFIG_VERSION + ".");
+    }
+
+    private void applyConfigMigrations(int currentVersion) {
+        if (currentVersion < 10) {
+            getConfig().set("draw-output.minimal-chat", true);
+            getConfig().set("draw-output.notify-offline-losers", true);
+            getConfig().set("fairness.broadcast-hash-before-draw", false);
+            getConfig().set("fairness.broadcast-proof-after-draw", false);
+            getConfig().set("lucky-number.enabled", false);
+            getConfig().set("lucky-number.broadcast-drawn-number", false);
+            getConfig().set("achievements.notify", false);
+            getConfig().set("achievements.broadcast", false);
+            getConfig().set("consolation-prizes.notify", false);
+            getConfig().set("pity-bonus.notify", false);
+            getConfig().set("draw-animation.enabled", false);
+            getConfig().set("draw-animation.gui.enabled", false);
+            getConfig().set("draw-animation.gui.pre-notice.enabled", false);
+        }
     }
 
     public int updateConfigDefaults() {

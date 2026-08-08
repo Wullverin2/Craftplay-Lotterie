@@ -1699,7 +1699,7 @@ public final class LotteryManager {
     }
 
     public void setLuckyNumber(Player player, String value) {
-        if (!plugin.getConfig().getBoolean("lucky-number.enabled", true)) {
+        if (!plugin.getConfig().getBoolean("lucky-number.enabled", false)) {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.lucky-number-disabled");
             return;
         }
@@ -1908,7 +1908,7 @@ public final class LotteryManager {
     }
 
     public void toggleDrawWatcher(Player player) {
-        if (!plugin.getConfig().getBoolean("draw-animation.gui.enabled", true)) {
+        if (!plugin.getConfig().getBoolean("draw-animation.gui.enabled", false)) {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.draw-watch-disabled");
             return;
         }
@@ -3675,8 +3675,9 @@ public final class LotteryManager {
     }
 
     private void maybeSendDrawWatchInvite(ZonedDateTime now) {
-        if (!plugin.getConfig().getBoolean("draw-animation.gui.pre-notice.enabled", true)
-            || !plugin.getConfig().getBoolean("draw-animation.gui.enabled", true)) {
+        if (isMinimalDrawChat()
+            || !plugin.getConfig().getBoolean("draw-animation.gui.pre-notice.enabled", false)
+            || !plugin.getConfig().getBoolean("draw-animation.gui.enabled", false)) {
             return;
         }
 
@@ -3773,7 +3774,7 @@ public final class LotteryManager {
         Map<String, String> placeholders = createCommonPlaceholders(null);
         placeholders.put("mystery_bonus", economyService.format(bonus));
         placeholders.put("pot", economyService.format(getTotalPot()));
-        if (plugin.getConfig().getBoolean("mystery-jackpot.broadcast", true)) {
+        if (!isMinimalDrawChat() && plugin.getConfig().getBoolean("mystery-jackpot.broadcast", true)) {
             broadcastConfigured("messages.mystery-jackpot-revealed", placeholders);
         }
         appendLog("mystery_jackpot", Map.of("amount", economyService.format(bonus)));
@@ -3781,7 +3782,7 @@ public final class LotteryManager {
     }
 
     private int drawLuckyNumber(Random drawRandom) {
-        if (!plugin.getConfig().getBoolean("lucky-number.enabled", true)) {
+        if (isMinimalDrawChat() || !plugin.getConfig().getBoolean("lucky-number.enabled", false)) {
             return -1;
         }
 
@@ -3797,7 +3798,7 @@ public final class LotteryManager {
     }
 
     private int awardLuckyNumberBonuses(int drawnNumber) {
-        if (drawnNumber <= 0 || !plugin.getConfig().getBoolean("lucky-number.enabled", true)) {
+        if (isMinimalDrawChat() || drawnNumber <= 0 || !plugin.getConfig().getBoolean("lucky-number.enabled", false)) {
             return 0;
         }
 
@@ -3874,7 +3875,7 @@ public final class LotteryManager {
             }
             getOrCreateStats(playerId, playerName).recordConsolationReward(playerName);
             getOrCreateSeasonStats(playerId, playerName).recordConsolationReward(playerName);
-            if (plugin.getConfig().getBoolean("consolation-prizes.notify", true)) {
+            if (!isMinimalDrawChat() && plugin.getConfig().getBoolean("consolation-prizes.notify", false)) {
                 notifyOrQueue(playerId, "messages.consolation-prize", placeholders, "refund");
             }
             checkAchievements(playerId, playerName);
@@ -3920,7 +3921,9 @@ public final class LotteryManager {
             }
             stats.recordPityReward(playerName, resetStreak);
             getOrCreateSeasonStats(playerId, playerName).recordPityReward(playerName, resetStreak);
-            notifyOrQueue(playerId, "messages.pity-bonus", placeholders, "refund");
+            if (!isMinimalDrawChat() && plugin.getConfig().getBoolean("pity-bonus.notify", false)) {
+                notifyOrQueue(playerId, "messages.pity-bonus", placeholders, "refund");
+            }
             checkAchievements(playerId, playerName);
             rewarded++;
         }
@@ -3957,8 +3960,10 @@ public final class LotteryManager {
         Map<String, String> placeholders = createCommonPlaceholders(Bukkit.getPlayer(playerId));
         placeholders.put("player", playerName);
         placeholders.put("achievement", plugin.getConfig().getString("achievements.items." + achievementId + ".name", achievementId));
-        notifyOrQueue(playerId, "messages.achievement-unlocked", placeholders, "win");
-        if (plugin.getConfig().getBoolean("achievements.broadcast", true)) {
+        if (plugin.getConfig().getBoolean("achievements.notify", false)) {
+            notifyOrQueue(playerId, "messages.achievement-unlocked", placeholders, "win");
+        }
+        if (plugin.getConfig().getBoolean("achievements.broadcast", false)) {
             broadcastConfigured("messages.achievement-broadcast", placeholders, Bukkit.getPlayer(playerId));
         }
         for (String command : plugin.getConfig().getStringList("achievements.items." + achievementId + ".commands")) {
@@ -4152,8 +4157,6 @@ public final class LotteryManager {
     }
 
     private DrawResult draw(CommandSender trigger, boolean forced, String drawKey) {
-        MessageUtil.send(trigger, plugin.getMessagesConfig(trigger), "messages.draw-start");
-
         if (currentRound().getTotalTickets() <= 0) {
             currentRound().reset(LocalDateTime.now(getZoneId()), 0.0D);
             clearRoundReminderState();
@@ -4198,7 +4201,7 @@ public final class LotteryManager {
         double amount = payoutTax.netAmount();
         int totalTickets = currentRound().getTotalTickets();
         FairDrawContext fairDraw = createFairDrawContext(drawKey);
-        if (fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-hash-before-draw", true)) {
+        if (!isMinimalDrawChat() && fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-hash-before-draw", false)) {
             broadcastConfigured("messages.fairness-hash", fairDraw.placeholders());
         }
         int luckyDrawnNumber = drawLuckyNumber(fairDraw.random());
@@ -4245,7 +4248,7 @@ public final class LotteryManager {
         long winnerDelay = runDrawAnimation(placeholders);
         runGuiDrawAnimation(winnerPayouts, winnerDelay);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (plugin.getConfig().getBoolean("draw-animation.enabled", false)) {
+            if (!isMinimalDrawChat() && plugin.getConfig().getBoolean("draw-animation.enabled", false)) {
                 broadcastConfigured("messages.draw-animation-reveal", placeholders, onlineWinner);
             }
             if (winnerPayouts.size() > 1) {
@@ -4253,14 +4256,18 @@ public final class LotteryManager {
             } else {
                 broadcastConfigured("messages.draw-winner", placeholders, onlineWinner);
             }
-            if (fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-proof-after-draw", true)) {
+            if (!isMinimalDrawChat() && fairDraw.enabled() && plugin.getConfig().getBoolean("fairness.broadcast-proof-after-draw", false)) {
                 broadcastConfigured("messages.fairness-proof", placeholders, onlineWinner);
             }
-            for (WinnerPayout payout : winnerPayouts) {
-                broadcastConfigured("messages.winner-congratulation", createWinnerPlaceholders(payout, amount, totalTickets), Bukkit.getPlayer(payout.playerId()));
+            if (!isMinimalDrawChat()) {
+                for (WinnerPayout payout : winnerPayouts) {
+                    broadcastConfigured("messages.winner-congratulation", createWinnerPlaceholders(payout, amount, totalTickets), Bukkit.getPlayer(payout.playerId()));
+                }
             }
             playWinEffects(mainWinner.playerId());
         }, winnerDelay);
+
+        queueOfflineLoserNotifications(winnerIds, winnerPayouts, amount, totalTickets);
 
         for (WinnerPayout payout : winnerPayouts) {
             Map<String, String> payoutPlaceholders = createWinnerPlaceholders(payout, amount, totalTickets);
@@ -4295,6 +4302,36 @@ public final class LotteryManager {
         appendLog("draw_winner", placeholders);
         runAutoBackupAfterDraw();
         return new DrawResult(forced, "messages.admin-draw-success", placeholders);
+    }
+
+    private void queueOfflineLoserNotifications(Set<UUID> winnerIds, List<WinnerPayout> winnerPayouts, double amount, int totalTickets) {
+        if (!plugin.getConfig().getBoolean("draw-output.notify-offline-losers", true)) {
+            return;
+        }
+
+        String winners = formatWinnerPayouts(winnerPayouts);
+        for (Map.Entry<UUID, Integer> entry : currentRound().getTicketsByPlayer().entrySet()) {
+            UUID playerId = entry.getKey();
+            if (winnerIds.contains(playerId) || Bukkit.getPlayer(playerId) != null) {
+                continue;
+            }
+
+            String playerName = getCachedPlayerName(playerId);
+            int tickets = entry.getValue();
+            Map<String, String> placeholders = createCommonPlaceholders(null);
+            placeholders.put("player", playerName);
+            placeholders.put("player_uuid", playerId.toString());
+            placeholders.put("tickets", String.valueOf(tickets));
+            placeholders.put("amount", economyService.format(amount));
+            placeholders.put("winners", winners);
+            placeholders.put("winner_count", String.valueOf(winnerPayouts.size()));
+            placeholders.put("chance", formatChance((double) tickets / Math.max(1, totalTickets)));
+            queuePendingNotification(playerId, "messages.draw-lost-offline", placeholders);
+        }
+    }
+
+    private boolean isMinimalDrawChat() {
+        return plugin.getConfig().getBoolean("draw-output.minimal-chat", true);
     }
 
     private void saveRollbackSnapshot(String drawKey, FairDrawContext fairDraw, List<WinnerPayout> winnerPayouts) {
@@ -4453,7 +4490,7 @@ public final class LotteryManager {
     }
 
     private long runDrawAnimation(Map<String, String> placeholders) {
-        if (!plugin.getConfig().getBoolean("draw-animation.enabled", false)) {
+        if (isMinimalDrawChat() || !plugin.getConfig().getBoolean("draw-animation.enabled", false)) {
             return 0L;
         }
 
@@ -4470,7 +4507,7 @@ public final class LotteryManager {
     }
 
     private void runGuiDrawAnimation(List<WinnerPayout> winnerPayouts, long revealDelay) {
-        if (!plugin.getConfig().getBoolean("draw-animation.gui.enabled", false) || winnerPayouts.isEmpty()) {
+        if (isMinimalDrawChat() || !plugin.getConfig().getBoolean("draw-animation.gui.enabled", false) || winnerPayouts.isEmpty()) {
             return;
         }
 
@@ -5122,7 +5159,9 @@ public final class LotteryManager {
             placeholders.put("amount", economyService.format(payout.amount()));
             placeholders.put("member_count", String.valueOf(groupMembers.size()));
             placeholders.put("share_amount", economyService.format(share));
-            broadcastConfigured("messages.group-lottery-shared", placeholders);
+            if (!isMinimalDrawChat()) {
+                broadcastConfigured("messages.group-lottery-shared", placeholders);
+            }
         }
         return sharedPayouts;
     }

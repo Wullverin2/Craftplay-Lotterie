@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 9
+config-version: 10
 
 update-checker:
   # DE: Aktiviert die Prüfung auf neue Plugin-Versionen über GitHub Releases.
@@ -109,6 +109,14 @@ settings:
   # DE: Zahlt Ticketkosten zurück, wenn zu wenige Spieler für die Ziehung vorhanden sind.
   # EN: Refunds ticket costs when there are not enough players for the draw.
   refund-on-not-enough-players: true
+
+draw-output:
+  # DE: Aktiviert eine ruhige Ziehung: im Chat wird bei erfolgreicher Ziehung nur der Gewinner bzw. die Gewinnerliste angezeigt.
+  # EN: Enables a quiet draw: successful draws only show the winner or winner list in chat.
+  minimal-chat: true
+  # DE: Speichert für offline teilnehmende Nicht-Gewinner eine Nachricht, die beim nächsten Join zugestellt wird.
+  # EN: Stores a message for offline participating non-winners and delivers it on their next join.
+  notify-offline-losers: true
 
 pricing:
   tiered-prices:
@@ -359,10 +367,10 @@ fairness:
   enabled: true
   # DE: Zeigt den Hash vor der Gewinnerermittlung im Chat.
   # EN: Shows the hash in chat before winners are calculated.
-  broadcast-hash-before-draw: true
+  broadcast-hash-before-draw: false
   # DE: Zeigt Seed und Prüfdaten nach der Ziehung im Chat.
   # EN: Shows seed and verification data after the draw.
-  broadcast-proof-after-draw: true
+  broadcast-proof-after-draw: false
 
 rollback:
   # DE: Aktiviert /lottery rollback für die letzte Ziehung.
@@ -527,7 +535,7 @@ group-lottery:
 lucky-number:
   # DE: Spieler koennen mit /lottery lucky <zahl> eine Glueckszahl setzen.
   # EN: Players can set a lucky number with /lottery lucky <number>.
-  enabled: true
+  enabled: false
   # DE: Kleinste erlaubte Glueckszahl.
   # EN: Smallest allowed lucky number.
   min: 1
@@ -542,7 +550,7 @@ lucky-number:
   require-current-ticket: true
   # DE: Verkuendet die gezogene Glueckszahl im Chat.
   # EN: Announces the drawn lucky number in chat.
-  broadcast-drawn-number: true
+  broadcast-drawn-number: false
   # DE: Konsolenbefehle fuer Glueckszahl-Treffer. Platzhalter: %player%, %lucky_number%, %lucky_bonus%.
   # EN: Console commands for lucky-number hits. Placeholders: %player%, %lucky_number%, %lucky_bonus%.
   commands: []
@@ -559,7 +567,7 @@ consolation-prizes:
   minimum-tickets: 1
   # DE: Sendet Spielern eine Nachricht, wenn sie einen Trostpreis erhalten.
   # EN: Sends players a message when they receive a consolation prize.
-  notify: true
+  notify: false
   # DE: Konsolenbefehle fuer Trostpreise. Platzhalter: %player%, %tickets%, %consolation_amount%.
   # EN: Console commands for consolation prizes. Placeholders: %player%, %tickets%, %consolation_amount%.
   commands: []
@@ -577,6 +585,9 @@ pity-bonus:
   # DE: Setzt die Pechserie nach dem Bonus wieder auf 0.
   # EN: Resets the losing streak to 0 after the bonus.
   reset-streak-after-reward: true
+  # DE: Sendet Spielern eine Nachricht, wenn der Pechserien-Bonus ausgezahlt wird.
+  # EN: Sends players a message when the losing-streak bonus is paid.
+  notify: false
   # DE: Konsolenbefehle fuer den Pechserien-Bonus. Platzhalter: %player%, %losing_streak%, %pity_amount%.
   # EN: Console commands for pity bonuses. Placeholders: %player%, %losing_streak%, %pity_amount%.
   commands: []
@@ -607,9 +618,12 @@ achievements:
   # DE: Aktiviert Lotterie-Erfolge fuer Spieler.
   # EN: Enables lottery achievements for players.
   enabled: true
+  # DE: Sendet dem Spieler eine Nachricht, wenn ein Erfolg freigeschaltet wird.
+  # EN: Sends the player a message when an achievement is unlocked.
+  notify: false
   # DE: Sendet eine Servernachricht, wenn ein Erfolg freigeschaltet wird.
   # EN: Broadcasts when an achievement is unlocked.
-  broadcast: true
+  broadcast: false
   # DE: Jeder Eintrag nutzt enabled (aktiv), name (Anzeigename) und commands (Konsolenbefehle beim Freischalten).
   # EN: Each entry uses enabled, name, and commands (console commands when unlocked).
   items:
@@ -720,7 +734,7 @@ rewards:
 draw-animation:
   # DE: Aktiviert Countdown-Nachrichten vor der Gewinnerverkündung.
   # EN: Enables countdown messages before winner reveal.
-  enabled: true
+  enabled: false
   # DE: Sekundenwerte, die im Countdown angezeigt werden.
   # EN: Second values shown in the countdown.
   countdown: [5, 4, 3, 2, 1]
@@ -730,14 +744,14 @@ draw-animation:
   gui:
     # DE: Öffnet während der Ziehung ein kleines animiertes Gewinner-GUI für online Spieler.
     # EN: Opens a small animated winner GUI for online players during the draw.
-    enabled: true
+    enabled: false
     # DE: true oeffnet das Animations-GUI fuer alle automatisch. false bedeutet: Spieler muessen /lottery watch klicken.
     # EN: true opens the animation GUI for everyone automatically. false means players must click /lottery watch.
     auto-open-for-everyone: false
     pre-notice:
       # DE: Sendet kurz vor der Ziehung eine anklickbare Nachricht zum Zuschauen.
       # EN: Sends a clickable watch message shortly before the draw.
-      enabled: true
+      enabled: false
       # DE: Wie viele Sekunden vor der Ziehung die Zuschauen-Nachricht gesendet wird.
       # EN: How many seconds before the draw the watch message is sent.
       seconds-before: 30
