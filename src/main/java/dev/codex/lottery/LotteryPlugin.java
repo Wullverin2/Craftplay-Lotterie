@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -61,6 +63,7 @@ public final class LotteryPlugin extends JavaPlugin {
         saveResource("lotteries.yml", false);
         saveResource("lang/de.yml", false);
         saveResource("lang/en.yml", false);
+        synchronizeManagedConfigsOnLoad("startup");
         loadCustomConfigs();
 
         if (!setupEconomy()) {
@@ -99,6 +102,7 @@ public final class LotteryPlugin extends JavaPlugin {
     public void reloadPlugin() {
         reloadConfig();
         migrateConfigIfNeeded();
+        synchronizeManagedConfigsOnLoad("reload");
         loadCustomConfigs();
         updateChecker = new UpdateChecker(this);
         if (lotteryManager != null) {
@@ -415,68 +419,248 @@ public final class LotteryPlugin extends JavaPlugin {
     }
 
     public int updateConfigDefaults() {
-        int updatedFiles = 0;
-        List<String> changedFiles = new ArrayList<>();
-        updatedFiles += updateConfigDefaults("config.yml", new File(getDataFolder(), "config.yml"), changedFiles) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/gui.yml"), changedFiles) ? 1 : 0;
-        for (String language : getAvailableLanguages()) {
-            updatedFiles += updateConfigDefaults("gui/gui.yml", new File(getDataFolder(), "gui/" + language + ".yml"), changedFiles) ? 1 : 0;
-        }
-        updatedFiles += updateConfigDefaults("holograms.yml", hologramsFile, changedFiles) ? 1 : 0;
-        updatedFiles += updateConfigDefaults("lotteries.yml", lotteriesFile, changedFiles) ? 1 : 0;
-        File languageFolder = new File(getDataFolder(), "lang");
-        File[] languageFiles = languageFolder.listFiles((directory, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
-        if (languageFiles != null) {
-            for (File languageFile : languageFiles) {
-                String fileName = languageFile.getName();
-                String bundledResource = resourceExists("lang/" + fileName) ? "lang/" + fileName : "lang/de.yml";
-                updatedFiles += updateConfigDefaults(bundledResource, languageFile, changedFiles) ? 1 : 0;
-            }
-        }
-        writeConfigUpdateReport(changedFiles);
+        List<ConfigSyncResult> results = synchronizeManagedConfigFiles("manual", true);
         reloadConfig();
         loadCustomConfigs();
         writeDefaultReferenceFiles();
-        return updatedFiles;
+        return (int) results.stream().filter(ConfigSyncResult::changed).count();
     }
 
     public File getLastConfigUpdateReportFile() {
         return lastConfigUpdateReportFile;
     }
 
-    private boolean updateConfigDefaults(String resourcePath, File file, List<String> changedFiles) {
+    private void synchronizeManagedConfigsOnLoad(String reason) {
+        List<ConfigSyncResult> results = synchronizeManagedConfigFiles(reason, false);
+        if (results.stream().anyMatch(ConfigSyncResult::changed)) {
+            reloadConfig();
+        }
+    }
+
+    private List<ConfigSyncResult> synchronizeManagedConfigFiles(String reason, boolean writeReportWhenUnchanged) {
+        List<ConfigSyncResult> results = new ArrayList<>();
+        Set<String> languages = discoverLanguageCodes();
+
+        File guiFolder = new File(getDataFolder(), "gui");
+        File legacyGuiFile = new File(guiFolder, "gui.yml");
+        ensureGuiFilesForLanguages(guiFolder, legacyGuiFile, languages);
+
+        addSyncResult(results, "config.yml", new File(getDataFolder(), "config.yml"), reason);
+        addSyncResult(results, "gui/gui.yml", legacyGuiFile, reason);
+        for (String language : languages.stream().sorted().toList()) {
+            addSyncResult(results, "gui/gui.yml", new File(guiFolder, language + ".yml"), reason);
+        }
+
+        addSyncResult(results, "holograms.yml", new File(getDataFolder(), "holograms.yml"), reason);
+        addSyncResult(results, "lotteries.yml", new File(getDataFolder(), "lotteries.yml"), reason);
+
+        File languageFolder = new File(getDataFolder(), "lang");
+        for (String language : languages.stream().sorted().toList()) {
+            String fileName = language + ".yml";
+            String bundledResource = resourceExists("lang/" + fileName) ? "lang/" + fileName : "lang/de.yml";
+            addSyncResult(results, bundledResource, new File(languageFolder, fileName), reason);
+        }
+
+        long changedFiles = results.stream().filter(ConfigSyncResult::changed).count();
+        if (changedFiles > 0 || writeReportWhenUnchanged) {
+            writeConfigUpdateReport(results);
+        }
+        if (changedFiles > 0) {
+            getLogger().info("Synchronized " + changedFiles + " config file(s) during " + reason + ".");
+        }
+        return results;
+    }
+
+    private void addSyncResult(List<ConfigSyncResult> results, String resourcePath, File file, String reason) {
+        ConfigSyncResult result = synchronizeConfigFile(resourcePath, file, reason);
+        if (result != null) {
+            results.add(result);
+        }
+    }
+
+    private ConfigSyncResult synchronizeConfigFile(String resourcePath, File file, String reason) {
         try (InputStream inputStream = getResource(resourcePath)) {
             if (inputStream == null) {
-                return false;
+                return null;
             }
             if (file.getParentFile() != null && !file.getParentFile().exists() && !file.getParentFile().mkdirs()) {
                 getLogger().warning("Could not create folder for " + file.getName());
-                return false;
+                return null;
             }
             YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
             String before = config.saveToString();
             YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
-            config.setDefaults(defaults);
-            config.options().copyDefaults(true);
+
+            int removed = removeObsoleteKeys(config, defaults, resourcePath, "");
+            int added = addMissingDefaults(config, defaults, "");
             if (!before.equals(config.saveToString())) {
-                File backup = new File(getDataFolder(), "migrations/" + file.getName() + "-defaults-" + System.currentTimeMillis() + ".yml");
-                if (file.exists()) {
-                    if (backup.getParentFile() != null && !backup.getParentFile().exists()) {
-                        backup.getParentFile().mkdirs();
-                    }
-                    Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                }
+                File backup = file.exists() ? backupConfigFile(file, reason) : null;
                 config.save(file);
-                changedFiles.add(resourcePath);
-                return true;
+                return new ConfigSyncResult(resourcePath, file, added, removed, backup);
             }
         } catch (IOException exception) {
-            getLogger().warning("Could not update defaults for " + resourcePath + ": " + exception.getMessage());
+            getLogger().warning("Could not synchronize " + resourcePath + ": " + exception.getMessage());
+        }
+        return new ConfigSyncResult(resourcePath, file, 0, 0, null);
+    }
+
+    private int addMissingDefaults(YamlConfiguration config, YamlConfiguration defaults, String path) {
+        ConfigurationSection defaultSection = getSection(defaults, path);
+        if (defaultSection == null) {
+            return 0;
+        }
+
+        int added = 0;
+        for (String key : defaultSection.getKeys(false)) {
+            String childPath = joinPath(path, key);
+            if (defaults.isConfigurationSection(childPath)) {
+                if (!config.isConfigurationSection(childPath)) {
+                    config.set(childPath, null);
+                    config.createSection(childPath);
+                    added++;
+                }
+                added += addMissingDefaults(config, defaults, childPath);
+            } else if (!config.contains(childPath, false) || config.isConfigurationSection(childPath)) {
+                config.set(childPath, defaults.get(childPath));
+                added++;
+            }
+        }
+        return added;
+    }
+
+    private int removeObsoleteKeys(YamlConfiguration config, YamlConfiguration defaults, String resourcePath, String path) {
+        ConfigurationSection currentSection = getSection(config, path);
+        ConfigurationSection defaultSection = getSection(defaults, path);
+        if (currentSection == null || defaultSection == null) {
+            return 0;
+        }
+
+        int removed = 0;
+        for (String key : new ArrayList<>(currentSection.getKeys(false))) {
+            String childPath = joinPath(path, key);
+            if (!defaults.contains(childPath, false)) {
+                if (shouldPreserveUnknownKey(resourcePath, path)) {
+                    continue;
+                }
+                config.set(childPath, null);
+                removed++;
+                continue;
+            }
+
+            boolean currentIsSection = config.isConfigurationSection(childPath);
+            boolean defaultIsSection = defaults.isConfigurationSection(childPath);
+            if (currentIsSection && defaultIsSection) {
+                removed += removeObsoleteKeys(config, defaults, resourcePath, childPath);
+            } else if (currentIsSection != defaultIsSection) {
+                if (defaultIsSection) {
+                    config.set(childPath, null);
+                    config.createSection(childPath);
+                } else {
+                    config.set(childPath, defaults.get(childPath));
+                }
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private ConfigurationSection getSection(YamlConfiguration config, String path) {
+        return path.isBlank() ? config : config.getConfigurationSection(path);
+    }
+
+    private String joinPath(String parent, String key) {
+        return parent.isBlank() ? key : parent + "." + key;
+    }
+
+    private boolean shouldPreserveUnknownKey(String resourcePath, String parentPath) {
+        String normalizedResource = resourcePath.replace('\\', '/').toLowerCase(Locale.ROOT);
+        if (normalizedResource.startsWith("gui/")) {
+            return parentPath.endsWith(".items");
+        }
+        if ("config.yml".equals(normalizedResource)) {
+            return Set.of(
+                "pricing.tiered-prices.tiers",
+                "free-tickets.reasons",
+                "season-shop.rewards",
+                "community-goals.goals",
+                "achievements.items",
+                "rewards.commands-by-rank",
+                "rewards.packages.items",
+                "webhook.events"
+            ).contains(parentPath);
+        }
+        if ("holograms.yml".equals(normalizedResource)) {
+            return "holograms".equals(parentPath) || "templates.statistics".equals(parentPath);
+        }
+        if ("lotteries.yml".equals(normalizedResource)) {
+            return "profiles".equals(parentPath);
         }
         return false;
     }
 
-    private void writeConfigUpdateReport(List<String> changedFiles) {
+    private File backupConfigFile(File file, String reason) throws IOException {
+        File migrationFolder = new File(getDataFolder(), "migrations");
+        if (!migrationFolder.exists() && !migrationFolder.mkdirs()) {
+            throw new IOException("Could not create migrations folder for config backup.");
+        }
+
+        String safePath = relativePluginPath(file)
+            .replace('\\', '_')
+            .replace('/', '_')
+            .replace(':', '_');
+        String safeReason = reason.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "-");
+        File backupFile = new File(migrationFolder, safePath + "-" + safeReason + "-" + System.currentTimeMillis() + ".yml");
+        Files.copy(file.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        getLogger().info("Created config sync backup: " + backupFile.getName());
+        return backupFile;
+    }
+
+    private String relativePluginPath(File file) {
+        try {
+            Path rootPath = getDataFolder().toPath().toAbsolutePath().normalize();
+            Path filePath = file.toPath().toAbsolutePath().normalize();
+            if (filePath.startsWith(rootPath)) {
+                return rootPath.relativize(filePath).toString();
+            }
+        } catch (IllegalArgumentException exception) {
+            // Fall back to the plain file name when a path cannot be relativized on this platform.
+        }
+        return file.getName();
+    }
+
+    private Set<String> discoverLanguageCodes() {
+        Set<String> languages = new LinkedHashSet<>();
+        collectLanguageCodes(new File(getDataFolder(), "lang"), languages, false);
+        collectLanguageCodes(new File(getDataFolder(), "gui"), languages, true);
+        languages.add(getDefaultLanguage());
+        if (resourceExists("lang/de.yml")) {
+            languages.add("de");
+        }
+        if (resourceExists("lang/en.yml")) {
+            languages.add("en");
+        }
+        languages.remove("gui");
+        languages.remove("");
+        return languages;
+    }
+
+    private void collectLanguageCodes(File folder, Set<String> languages, boolean skipLegacyGuiFile) {
+        File[] files = folder.listFiles((directory, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+            String fileName = file.getName();
+            String language = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
+            if (skipLegacyGuiFile && "gui".equals(language)) {
+                continue;
+            }
+            languages.add(language);
+        }
+    }
+
+    private void writeConfigUpdateReport(List<ConfigSyncResult> results) {
         File reportFolder = new File(getDataFolder(), "migrations");
         if (!reportFolder.exists() && !reportFolder.mkdirs()) {
             getLogger().warning("Could not create migrations folder for config update report.");
@@ -485,9 +669,28 @@ public final class LotteryPlugin extends JavaPlugin {
 
         lastConfigUpdateReportFile = new File(reportFolder, "config-update-"
             + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".txt");
-        String content = changedFiles.isEmpty()
-            ? "No config defaults were missing.\n"
-            : "Updated config defaults:\n- " + String.join("\n- ", changedFiles) + "\n";
+        List<ConfigSyncResult> changedResults = results.stream().filter(ConfigSyncResult::changed).toList();
+        String content;
+        if (changedResults.isEmpty()) {
+            content = "No managed config files required synchronization.\n";
+        } else {
+            StringBuilder builder = new StringBuilder("Synchronized managed config files:\n");
+            for (ConfigSyncResult result : changedResults) {
+                builder.append("- ")
+                    .append(relativePluginPath(result.file()))
+                    .append(" (template: ")
+                    .append(result.resourcePath())
+                    .append(", added: ")
+                    .append(result.added())
+                    .append(", removed: ")
+                    .append(result.removed());
+                if (result.backupFile() != null) {
+                    builder.append(", backup: ").append(relativePluginPath(result.backupFile()));
+                }
+                builder.append(")\n");
+            }
+            content = builder.toString();
+        }
         try {
             Files.writeString(lastConfigUpdateReportFile.toPath(), content, StandardCharsets.UTF_8);
         } catch (IOException exception) {
@@ -563,7 +766,16 @@ public final class LotteryPlugin extends JavaPlugin {
     }
 
     private void ensureGuiFilesForLanguages(File guiFolder, File legacyGuiFile) {
-        for (String language : getAvailableLanguages()) {
+        ensureGuiFilesForLanguages(guiFolder, legacyGuiFile, getAvailableLanguages());
+    }
+
+    private void ensureGuiFilesForLanguages(File guiFolder, File legacyGuiFile, Collection<String> languages) {
+        if (!guiFolder.exists() && !guiFolder.mkdirs()) {
+            getLogger().warning("Could not create gui folder.");
+            return;
+        }
+
+        for (String language : languages) {
             File languageGuiFile = new File(guiFolder, language + ".yml");
             if (languageGuiFile.exists()) {
                 continue;
@@ -594,10 +806,7 @@ public final class LotteryPlugin extends JavaPlugin {
             config.setDefaults(defaults);
             config.options().copyDefaults(true);
             if (!before.equals(config.saveToString())) {
-                if (file.getParentFile() != null && !file.getParentFile().exists()) {
-                    file.getParentFile().mkdirs();
-                }
-                config.save(file);
+                getLogger().fine("Applied in-memory defaults for " + file.getName() + "; persistent sync runs with backups.");
             }
         } catch (IOException exception) {
             getLogger().warning("Could not read defaults for " + file.getName() + ": " + exception.getMessage());
@@ -611,5 +820,12 @@ public final class LotteryPlugin extends JavaPlugin {
             return config;
         }
         return languageConfigs.getOrDefault("de", new YamlConfiguration());
+    }
+
+    private record ConfigSyncResult(String resourcePath, File file, int added, int removed, File backupFile) {
+
+        private boolean changed() {
+            return added > 0 || removed > 0;
+        }
     }
 }
