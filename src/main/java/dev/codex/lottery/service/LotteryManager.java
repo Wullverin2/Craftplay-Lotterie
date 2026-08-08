@@ -6,9 +6,15 @@ import dev.codex.lottery.model.PlayerLotteryStats;
 import dev.codex.lottery.model.WinnerEntry;
 import dev.codex.lottery.util.MessageUtil;
 import dev.codex.lottery.util.TimeUtil;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -42,6 +48,8 @@ import java.util.function.DoubleFunction;
 import java.util.function.LongFunction;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToLongFunction;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import net.kyori.adventure.text.Component;
@@ -106,6 +114,7 @@ public final class LotteryManager {
     private final File transactionFile;
     private final DatabaseStorageService databaseStorage;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final Map<String, TextDisplay> hologramEntities = new HashMap<>();
 
     private YamlConfiguration dataConfig;
     private YamlConfiguration logConfig;
@@ -114,7 +123,18 @@ public final class LotteryManager {
     private BukkitTask hologramTask;
     private BukkitTask announcementTask;
     private BukkitTask paymentRetryTask;
-    private final Map<String, TextDisplay> hologramEntities = new HashMap<>();
+    private BukkitTask webCacheTask;
+    private HttpServer webServer;
+    private ExecutorService webExecutor;
+    private volatile String webStatusJson = "{}";
+    private volatile String webOverviewHtml = "";
+    private volatile boolean webServerRunning;
+    private volatile String webServerUrl = "";
+    private volatile String webServerApiUrl = "";
+    private volatile String webServerLastError = "";
+    private volatile String webAuthToken = "";
+    private volatile boolean webCorsEnabled = true;
+    private volatile String webCorsAllowedOrigin = "*";
     private String lastDrawKey;
     private final Map<String, String> lastDrawKeys = new HashMap<>();
     private String operationLotteryId;
@@ -210,6 +230,10 @@ public final class LotteryManager {
         if (paymentRetryTask != null) {
             paymentRetryTask.cancel();
         }
+        if (webCacheTask != null) {
+            webCacheTask.cancel();
+        }
+        stopInternalWebServer();
         removeHologram();
         save();
         databaseStorage.close();
@@ -223,6 +247,8 @@ public final class LotteryManager {
         startHologramTask();
         startAnnouncementTask();
         startPaymentRetryTask();
+        startInternalWebServer();
+        startWebCacheTask();
     }
 
     private LotteryRound currentRound() {
@@ -538,6 +564,223 @@ public final class LotteryManager {
         ));
     }
 
+    public void showWebServerStatus(CommandSender sender) {
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("state", webServerRunning ? "online" : "offline");
+        placeholders.put("url", webServerUrl.isBlank() ? "-" : webServerUrl);
+        placeholders.put("api_url", webServerApiUrl.isBlank() ? "-" : webServerApiUrl);
+        placeholders.put("error", webServerLastError.isBlank() ? "-" : webServerLastError);
+        if (!plugin.getConfig().getBoolean("web-server.enabled", true)) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-server-disabled", placeholders);
+            return;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-server-status", placeholders);
+    }
+
+    public void restartWebServer(CommandSender sender) {
+        startInternalWebServer();
+        startWebCacheTask();
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("state", webServerRunning ? "online" : "offline");
+        placeholders.put("url", webServerUrl.isBlank() ? "-" : webServerUrl);
+        placeholders.put("api_url", webServerApiUrl.isBlank() ? "-" : webServerApiUrl);
+        placeholders.put("error", webServerLastError.isBlank() ? "-" : webServerLastError);
+        if (webServerRunning) {
+            MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-server-restarted", placeholders);
+            return;
+        }
+        MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.web-server-status", placeholders);
+    }
+
+    private void startWebCacheTask() {
+        if (webCacheTask != null) {
+            webCacheTask.cancel();
+        }
+        refreshWebCache();
+        if (!plugin.getConfig().getBoolean("web-server.enabled", true)) {
+            return;
+        }
+
+        long intervalSeconds = Math.max(1L, plugin.getConfig().getLong("web-server.update-interval-seconds", 5L));
+        webCacheTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refreshWebCache,
+            intervalSeconds * 20L, intervalSeconds * 20L);
+    }
+
+    private void refreshWebCache() {
+        try {
+            webStatusJson = buildWebStatusJson();
+            webOverviewHtml = buildWebOverviewHtml();
+        } catch (RuntimeException exception) {
+            webStatusJson = "{\"ok\":false,\"error\":\"" + escapeJson(exception.getMessage()) + "\"}";
+            webOverviewHtml = "<!doctype html><html><body><h1>Craftplay Lotterie</h1><p>Web cache error.</p></body></html>";
+            plugin.getLogger().warning("Could not refresh lottery web cache: " + exception.getMessage());
+        }
+    }
+
+    private void startInternalWebServer() {
+        stopInternalWebServer();
+        webServerLastError = "";
+        if (!plugin.getConfig().getBoolean("web-server.enabled", true)) {
+            webServerUrl = "";
+            webServerApiUrl = "";
+            return;
+        }
+
+        String host = plugin.getConfig().getString("web-server.host", "127.0.0.1");
+        if (host == null || host.isBlank()) {
+            host = "127.0.0.1";
+        }
+        int port = Math.max(1, Math.min(65535, plugin.getConfig().getInt("web-server.port", 8765)));
+        String rootPath = normalizeWebPath(plugin.getConfig().getString("web-server.root-path", "/"), "/");
+        String apiPath = normalizeWebPath(plugin.getConfig().getString("web-server.api-path", "/api/status"), "/api/status");
+        String healthPath = normalizeWebPath(plugin.getConfig().getString("web-server.health-path", "/api/health"), "/api/health");
+        webAuthToken = plugin.getConfig().getString("web-server.auth-token", "");
+        webCorsEnabled = plugin.getConfig().getBoolean("web-server.cors.enabled", true);
+        webCorsAllowedOrigin = plugin.getConfig().getString("web-server.cors.allowed-origin", "*");
+        if (webCorsAllowedOrigin == null || webCorsAllowedOrigin.isBlank()) {
+            webCorsAllowedOrigin = "*";
+        }
+
+        String displayHost = "0.0.0.0".equals(host) ? "localhost" : host;
+        webServerUrl = "http://" + displayHost + ":" + port + rootPath;
+        webServerApiUrl = "http://" + displayHost + ":" + port + apiPath;
+
+        try {
+            webServer = HttpServer.create(new InetSocketAddress(host, port), 0);
+            Set<String> registeredPaths = new HashSet<>();
+            registerWebContext(registeredPaths, apiPath, exchange -> handleCachedWebResponse(exchange, webStatusJson, "application/json"));
+            registerWebContext(registeredPaths, healthPath, this::handleHealthRequest);
+            registerWebContext(registeredPaths, rootPath, exchange -> handleCachedWebResponse(exchange, webOverviewHtml, "text/html"));
+            webExecutor = Executors.newFixedThreadPool(2, runnable -> {
+                Thread thread = new Thread(runnable, "Craftplay-Lotterie-Web");
+                thread.setDaemon(true);
+                return thread;
+            });
+            webServer.setExecutor(webExecutor);
+            webServer.start();
+            webServerRunning = true;
+            plugin.getLogger().info("Lottery web server listening on " + webServerApiUrl);
+        } catch (IOException | RuntimeException exception) {
+            webServerLastError = exception.getMessage();
+            stopInternalWebServer();
+            plugin.getLogger().warning("Could not start lottery web server: " + exception.getMessage());
+        }
+    }
+
+    private void stopInternalWebServer() {
+        webServerRunning = false;
+        if (webServer != null) {
+            webServer.stop(0);
+            webServer = null;
+        }
+        if (webExecutor != null) {
+            webExecutor.shutdownNow();
+            webExecutor = null;
+        }
+    }
+
+    private void registerWebContext(Set<String> registeredPaths, String path, HttpHandler handler) {
+        if (registeredPaths.add(path)) {
+            webServer.createContext(path, handler);
+        }
+    }
+
+    private void handleCachedWebResponse(HttpExchange exchange, String body, String contentType) throws IOException {
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendWebResponse(exchange, 204, "", "text/plain");
+            return;
+        }
+        if (!isWebRequestAuthorized(exchange)) {
+            sendWebResponse(exchange, 401, "{\"ok\":false,\"error\":\"unauthorized\"}", "application/json");
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod()) && !"HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendWebResponse(exchange, 405, "{\"ok\":false,\"error\":\"method_not_allowed\"}", "application/json");
+            return;
+        }
+        sendWebResponse(exchange, 200, body, contentType);
+    }
+
+    private void handleHealthRequest(HttpExchange exchange) throws IOException {
+        handleCachedWebResponse(exchange, "{\"ok\":true,\"service\":\"Craftplay Lotterie\"}", "application/json");
+    }
+
+    private void sendWebResponse(HttpExchange exchange, int status, String body, String contentType) throws IOException {
+        applyWebHeaders(exchange, contentType);
+        if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod()) || status == 204) {
+            exchange.sendResponseHeaders(status, -1);
+            exchange.close();
+            return;
+        }
+
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (OutputStream outputStream = exchange.getResponseBody()) {
+            outputStream.write(bytes);
+        }
+    }
+
+    private void applyWebHeaders(HttpExchange exchange, String contentType) {
+        exchange.getResponseHeaders().set("Content-Type", contentType + "; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        if (!webCorsEnabled) {
+            return;
+        }
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", webCorsAllowedOrigin);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    }
+
+    private boolean isWebRequestAuthorized(HttpExchange exchange) {
+        String token = webAuthToken;
+        if (token == null || token.isBlank()) {
+            return true;
+        }
+
+        String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+        if (authorization != null && authorization.equals("Bearer " + token)) {
+            return true;
+        }
+        return token.equals(getQueryParameter(exchange.getRequestURI(), "token"));
+    }
+
+    private String getQueryParameter(URI uri, String key) {
+        String query = uri.getRawQuery();
+        if (query == null || query.isBlank()) {
+            return "";
+        }
+
+        for (String part : query.split("&")) {
+            String[] pieces = part.split("=", 2);
+            String parameterKey;
+            try {
+                parameterKey = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException exception) {
+                return "";
+            }
+            if (!parameterKey.equals(key)) {
+                continue;
+            }
+            try {
+                return pieces.length > 1 ? URLDecoder.decode(pieces[1], StandardCharsets.UTF_8) : "";
+            } catch (IllegalArgumentException exception) {
+                return "";
+            }
+        }
+        return "";
+    }
+
+    private String normalizeWebPath(String path, String fallback) {
+        String normalized = path == null || path.isBlank() ? fallback : path.trim();
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
     public void createAuditExport(CommandSender sender) {
         save();
         File auditFolder = new File(plugin.getDataFolder(), "audit");
@@ -579,6 +822,123 @@ public final class LotteryManager {
         ));
     }
 
+    private String buildWebStatusJson() {
+        Map<String, String> placeholders = createCommonPlaceholders(null);
+        int currentTickets = currentRound().getTotalTickets();
+        int currentPlayers = currentRound().getUniquePlayers();
+        double ticketPot = currentRound().getJackpot();
+        double basePot = getConfiguredBasePot();
+        double totalPot = getTotalPot();
+        int totalKnownPlayers = playerStats.size();
+        int totalTicketsBought = playerStats.values().stream().mapToInt(PlayerLotteryStats::getTicketsBought).sum();
+        double totalSpent = playerStats.values().stream().mapToDouble(PlayerLotteryStats::getMoneySpent).sum();
+        double totalWon = playerStats.values().stream().mapToDouble(PlayerLotteryStats::getTotalWon).sum();
+
+        StringBuilder builder = new StringBuilder();
+        builder.append('{');
+        builder.append("\"ok\":true,");
+        builder.append("\"generated_at\":").append(jsonString(LocalDateTime.now(getZoneId()).toString())).append(',');
+        builder.append("\"server\":{");
+        builder.append("\"online_players\":").append(Bukkit.getOnlinePlayers().size()).append(',');
+        builder.append("\"pending_notifications\":").append(getPendingNotificationCount()).append(',');
+        builder.append("\"pending_payments\":").append(pendingPayments.size());
+        builder.append("},");
+        builder.append("\"lottery\":{");
+        builder.append("\"id\":").append(jsonString(getActiveLotteryId())).append(',');
+        builder.append("\"name\":").append(jsonString(getActiveLotteryDisplayName())).append(',');
+        builder.append("\"type\":").append(jsonString(getLotteryType())).append(',');
+        builder.append("\"next_draw\":").append(jsonString(placeholders.getOrDefault("next_draw", formatNextDraw()))).append(',');
+        builder.append("\"time_left\":").append(jsonString(placeholders.getOrDefault("time_left", ""))).append(',');
+        builder.append("\"pot\":").append(jsonMoney(totalPot)).append(',');
+        builder.append("\"pot_formatted\":").append(jsonString(economyService.format(totalPot))).append(',');
+        builder.append("\"ticket_pot\":").append(jsonMoney(ticketPot)).append(',');
+        builder.append("\"ticket_pot_formatted\":").append(jsonString(economyService.format(ticketPot))).append(',');
+        builder.append("\"base_pot\":").append(jsonMoney(basePot)).append(',');
+        builder.append("\"base_pot_formatted\":").append(jsonString(economyService.format(basePot))).append(',');
+        builder.append("\"ticket_price\":").append(jsonMoney(getTicketPrice())).append(',');
+        builder.append("\"ticket_price_formatted\":").append(jsonString(economyService.format(getTicketPrice()))).append(',');
+        builder.append("\"tickets_total\":").append(currentTickets).append(',');
+        builder.append("\"players\":").append(currentPlayers).append(',');
+        builder.append("\"min_players\":").append(getMinimumPlayers()).append(',');
+        builder.append("\"round_started_at\":").append(jsonString(currentRound().getStartedAt().toString()));
+        builder.append("},");
+        builder.append("\"totals\":{");
+        builder.append("\"known_players\":").append(totalKnownPlayers).append(',');
+        builder.append("\"tickets_bought\":").append(totalTicketsBought).append(',');
+        builder.append("\"money_spent\":").append(jsonMoney(totalSpent)).append(',');
+        builder.append("\"money_spent_formatted\":").append(jsonString(economyService.format(totalSpent))).append(',');
+        builder.append("\"total_won\":").append(jsonMoney(totalWon)).append(',');
+        builder.append("\"total_won_formatted\":").append(jsonString(economyService.format(totalWon)));
+        builder.append("},");
+        builder.append("\"last_winners\":").append(buildWinnerEntriesJson()).append(',');
+        builder.append("\"top\":{");
+        builder.append("\"tickets_bought\":").append(buildTopEntriesJson("tickets_bought")).append(',');
+        builder.append("\"money_spent\":").append(buildTopEntriesJson("money_spent")).append(',');
+        builder.append("\"wins\":").append(buildTopEntriesJson("wins")).append(',');
+        builder.append("\"highest_win\":").append(buildTopEntriesJson("highest_win")).append(',');
+        builder.append("\"total_won\":").append(buildTopEntriesJson("total_won")).append(',');
+        builder.append("\"current_tickets\":").append(buildTopEntriesJson("current_tickets"));
+        builder.append("},");
+        builder.append("\"endpoints\":{");
+        builder.append("\"html\":").append(jsonString(webServerUrl)).append(',');
+        builder.append("\"status\":").append(jsonString(webServerApiUrl));
+        builder.append('}');
+        builder.append('}');
+        return builder.toString();
+    }
+
+    private String buildWinnerEntriesJson() {
+        StringBuilder builder = new StringBuilder("[");
+        List<WinnerEntry> winners = winnerHistory().stream().limit(10).toList();
+        for (int index = 0; index < winners.size(); index++) {
+            WinnerEntry winner = winners.get(index);
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append('{');
+            builder.append("\"rank\":").append(index + 1).append(',');
+            builder.append("\"uuid\":").append(jsonString(winner.playerId().toString())).append(',');
+            builder.append("\"player\":").append(jsonString(winner.playerName())).append(',');
+            builder.append("\"amount\":").append(jsonMoney(winner.amount())).append(',');
+            builder.append("\"amount_formatted\":").append(jsonString(economyService.format(winner.amount()))).append(',');
+            builder.append("\"tickets\":").append(winner.ticketsBought()).append(',');
+            builder.append("\"won_at\":").append(jsonString(winner.wonAt().toString())).append(',');
+            builder.append("\"won_at_formatted\":").append(jsonString(winner.wonAt().format(WINNER_DATE_FORMAT)));
+            builder.append('}');
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private String buildTopEntriesJson(String statistic) {
+        StringBuilder builder = new StringBuilder("[");
+        List<TopEntry> entries = getTopEntryList(statistic).stream().limit(10).toList();
+        for (int index = 0; index < entries.size(); index++) {
+            TopEntry entry = entries.get(index);
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append('{');
+            builder.append("\"rank\":").append(index + 1).append(',');
+            builder.append("\"name\":").append(jsonString(entry.name())).append(',');
+            builder.append("\"value\":").append(jsonString(entry.value()));
+            builder.append('}');
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private String jsonString(String value) {
+        return "\"" + escapeJson(value) + "\"";
+    }
+
+    private String jsonMoney(double value) {
+        if (!Double.isFinite(value)) {
+            return "0.0";
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
     private String buildWebOverviewHtml() {
         Map<String, String> placeholders = createCommonPlaceholders(null);
         StringBuilder winners = new StringBuilder();
@@ -616,6 +976,7 @@ public final class LotteryManager {
             </head>
             <body>
               <h1>Craftplay Lotterie</h1>
+              <p>Live JSON: <code>%api_url%</code></p>
               <div class="grid">
                 <div class="card"><h2>Topf</h2><p>%pot%</p></div>
                 <div class="card"><h2>Tickets</h2><p>%tickets_total%</p></div>
@@ -634,6 +995,7 @@ public final class LotteryManager {
             .replace("%players%", escapeHtml(placeholders.getOrDefault("players", "0")))
             .replace("%min_players%", escapeHtml(placeholders.getOrDefault("min_players", "0")))
             .replace("%next_draw%", escapeHtml(placeholders.getOrDefault("next_draw", "")))
+            .replace("%api_url%", escapeHtml(webServerApiUrl.isBlank() ? "Nicht aktiv" : webServerApiUrl))
             .replace("%winners%", winners.toString())
             .replace("%top_tickets%", topTickets.toString());
     }
@@ -6956,7 +7318,31 @@ public final class LotteryManager {
     }
 
     private String escapeJson(String input) {
-        return input.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        if (input == null) {
+            return "";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < input.length(); index++) {
+            char character = input.charAt(index);
+            switch (character) {
+                case '\\' -> builder.append("\\\\");
+                case '"' -> builder.append("\\\"");
+                case '\b' -> builder.append("\\b");
+                case '\f' -> builder.append("\\f");
+                case '\n' -> builder.append("\\n");
+                case '\r' -> builder.append("\\r");
+                case '\t' -> builder.append("\\t");
+                default -> {
+                    if (character < 0x20) {
+                        builder.append(String.format(Locale.ROOT, "\\u%04x", (int) character));
+                    } else {
+                        builder.append(character);
+                    }
+                }
+            }
+        }
+        return builder.toString();
     }
 
     public record PurchaseResult(boolean success, String messagePath, Map<String, String> placeholders) {

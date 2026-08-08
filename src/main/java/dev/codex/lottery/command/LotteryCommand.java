@@ -100,7 +100,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             case "backup" -> handleBackup(sender);
             case "export" -> handleExport(sender, args);
             case "audit" -> handleAudit(sender);
-            case "web" -> handleWeb(sender);
+            case "web" -> handleWeb(sender, args);
             case "import" -> handleImport(sender, args);
             case "debug" -> handleDebug(sender);
             case "doctor" -> handleDoctor(sender, args);
@@ -193,6 +193,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 addMatching(suggestions, args[1], List.of("fix"));
             } else if ("export".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("csv", "web", "audit"));
+            } else if ("web".equals(subcommand) && sender.hasPermission("lottery.admin")) {
+                addMatching(suggestions, args[1], List.of("status", "restart", "export"));
             } else if ("setup".equals(subcommand) && sender.hasPermission("lottery.admin")) {
                 addMatching(suggestions, args[1], List.of("price", "minplayers", "drawtime", "adddrawtime", "multipledraws", "cooldown", "dailytickets", "dailyspend", "winners", "shares", "autobackup", "type", "fixedprize", "profile"));
             } else if ("season".equals(subcommand) && sender.hasPermission("lottery.admin")) {
@@ -705,12 +707,20 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleWeb(CommandSender sender) {
+    private boolean handleWeb(CommandSender sender, String[] args) {
         if (!sender.hasPermission("lottery.admin")) {
             MessageUtil.send(sender, plugin.getMessagesConfig(sender), "messages.no-permission");
             return true;
         }
-        lotteryManager.exportWebOverview(sender);
+        if (args.length >= 2 && "export".equalsIgnoreCase(args[1])) {
+            lotteryManager.exportWebOverview(sender);
+            return true;
+        }
+        if (args.length >= 2 && "restart".equalsIgnoreCase(args[1])) {
+            lotteryManager.restartWebServer(sender);
+            return true;
+        }
+        lotteryManager.showWebServerStatus(sender);
         return true;
     }
 
