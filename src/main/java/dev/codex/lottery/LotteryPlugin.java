@@ -38,7 +38,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class LotteryPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 11;
+    private static final int CONFIG_VERSION = 12;
 
     private EconomyService economyService;
     private LotteryManager lotteryManager;
@@ -415,6 +415,10 @@ public final class LotteryPlugin extends JavaPlugin {
             getConfig().set("web-server.auth-token", "");
             getConfig().set("web-server.cors.enabled", true);
             getConfig().set("web-server.cors.allowed-origin", "*");
+        }
+        if (currentVersion < 12) {
+            getConfig().set("web-server.page-title", "%server_name% Lotterie");
+            getConfig().set("web-server.server-name", "");
         }
     }
 

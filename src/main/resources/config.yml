@@ -4,7 +4,7 @@
 
 # DE: Interne Versionsnummer für automatische Migrationen. Bitte nur ändern, wenn du genau weißt, warum.
 # EN: Internal version number for automatic migrations. Only change this if you know exactly why.
-config-version: 11
+config-version: 12
 
 update-checker:
   # DE: Aktiviert die Prüfung auf neue Plugin-Versionen über GitHub Releases.
@@ -131,6 +131,12 @@ web-server:
   # DE: Aktualisierungsintervall des Statistik-Caches in Sekunden.
   # EN: Refresh interval for the statistics cache in seconds.
   update-interval-seconds: 5
+  # DE: Titel der HTML-Seite. Platzhalter: %server_name%, %lottery_name%, %lottery_id%.
+  # EN: Title of the HTML page. Placeholders: %server_name%, %lottery_name%, %lottery_id%.
+  page-title: "%server_name% Lotterie"
+  # DE: Optionaler Servername fuer die HTML-Seite. Leer nutzt automatisch die Server-MOTD.
+  # EN: Optional server name for the HTML page. Empty automatically uses the server MOTD.
+  server-name: ""
   # DE: Pfad fuer die HTML-Uebersicht.
   # EN: Path for the HTML overview.
   root-path: "/"

@@ -612,7 +612,8 @@ public final class LotteryManager {
             webOverviewHtml = buildWebOverviewHtml();
         } catch (RuntimeException exception) {
             webStatusJson = "{\"ok\":false,\"error\":\"" + escapeJson(exception.getMessage()) + "\"}";
-            webOverviewHtml = "<!doctype html><html><body><h1>Craftplay Lotterie</h1><p>Web cache error.</p></body></html>";
+            webOverviewHtml = "<!doctype html><html><body><h1>" + escapeHtml(buildWebPageTitle())
+                + "</h1><p>Web cache error.</p></body></html>";
             plugin.getLogger().warning("Could not refresh lottery web cache: " + exception.getMessage());
         }
     }
@@ -941,6 +942,7 @@ public final class LotteryManager {
 
     private String buildWebOverviewHtml() {
         Map<String, String> placeholders = createCommonPlaceholders(null);
+        String pageTitle = buildWebPageTitle();
         StringBuilder winners = new StringBuilder();
         for (WinnerEntry winner : winnerHistory().stream().limit(10).toList()) {
             winners.append("<li><strong>").append(escapeHtml(winner.playerName())).append("</strong> - ")
@@ -966,7 +968,7 @@ public final class LotteryManager {
             <head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width,initial-scale=1">
-              <title>Craftplay Lotterie</title>
+              <title>%page_title%</title>
               <style>
                 body{font-family:Arial,sans-serif;background:#101820;color:#f7f1e3;margin:0;padding:32px}
                 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
@@ -975,8 +977,7 @@ public final class LotteryManager {
               </style>
             </head>
             <body>
-              <h1>Craftplay Lotterie</h1>
-              <p>Live JSON: <code>%api_url%</code></p>
+              <h1>%page_title%</h1>
               <div class="grid">
                 <div class="card"><h2>Topf</h2><p>%pot%</p></div>
                 <div class="card"><h2>Tickets</h2><p>%tickets_total%</p></div>
@@ -990,14 +991,52 @@ public final class LotteryManager {
             </body>
             </html>
             """
+            .replace("%page_title%", escapeHtml(pageTitle))
             .replace("%pot%", escapeHtml(placeholders.getOrDefault("pot", "")))
             .replace("%tickets_total%", escapeHtml(placeholders.getOrDefault("tickets_total", "0")))
             .replace("%players%", escapeHtml(placeholders.getOrDefault("players", "0")))
             .replace("%min_players%", escapeHtml(placeholders.getOrDefault("min_players", "0")))
             .replace("%next_draw%", escapeHtml(placeholders.getOrDefault("next_draw", "")))
-            .replace("%api_url%", escapeHtml(webServerApiUrl.isBlank() ? "Nicht aktiv" : webServerApiUrl))
             .replace("%winners%", winners.toString())
             .replace("%top_tickets%", topTickets.toString());
+    }
+
+    private String buildWebPageTitle() {
+        String serverName = resolveWebDisplayServerName();
+        String titleTemplate = plugin.getConfig().getString("web-server.page-title", "%server_name% Lotterie");
+        if (titleTemplate == null || titleTemplate.isBlank()) {
+            titleTemplate = "%server_name% Lotterie";
+        }
+
+        String title = titleTemplate
+            .replace("%server_name%", serverName)
+            .replace("%lottery_name%", getActiveLotteryDisplayName())
+            .replace("%lottery_id%", getActiveLotteryId());
+        String plainTitle = toPlainText(title);
+        return plainTitle.isBlank() ? "Craftplay Lotterie" : plainTitle;
+    }
+
+    private String resolveWebDisplayServerName() {
+        String configuredName = toPlainText(plugin.getConfig().getString("web-server.server-name", ""));
+        if (!configuredName.isBlank()) {
+            return configuredName;
+        }
+
+        String motd = toPlainText(Bukkit.getServer().getMotd());
+        if (!motd.isBlank()) {
+            return motd;
+        }
+
+        String serverName = toPlainText(Bukkit.getServer().getName());
+        return serverName.isBlank() ? "Minecraft-Server" : serverName;
+    }
+
+    private String toPlainText(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        String stripped = org.bukkit.ChatColor.stripColor(MessageUtil.color(input));
+        return stripped == null ? "" : stripped.trim();
     }
 
     private String buildAuditReport() {
