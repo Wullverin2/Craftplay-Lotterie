@@ -43,6 +43,7 @@ public final class LotteryPlugin extends JavaPlugin {
     private EconomyService economyService;
     private LotteryManager lotteryManager;
     private FileConfiguration guiConfig;
+    private FileConfiguration bedrockGuiConfig;
     private FileConfiguration hologramsConfig;
     private FileConfiguration lotteriesConfig;
     private FileConfiguration playerLanguagesConfig;
@@ -53,12 +54,14 @@ public final class LotteryPlugin extends JavaPlugin {
     private UpdateChecker updateChecker;
     private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
     private final Map<String, FileConfiguration> guiConfigs = new HashMap<>();
+    private final Map<String, FileConfiguration> bedrockGuiConfigs = new HashMap<>();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         migrateConfigIfNeeded();
         saveResource("gui/gui.yml", false);
+        saveResource("gui/bedrock-gui.yml", false);
         saveResource("holograms.yml", false);
         saveResource("lotteries.yml", false);
         saveResource("lang/de.yml", false);
@@ -160,6 +163,38 @@ public final class LotteryPlugin extends JavaPlugin {
 
     public Collection<FileConfiguration> getGuiConfigs() {
         return Collections.unmodifiableCollection(guiConfigs.values());
+    }
+
+    public FileConfiguration getBedrockGuiConfig() {
+        return getBedrockGuiConfig(getDefaultLanguage());
+    }
+
+    public FileConfiguration getBedrockGuiConfig(CommandSender sender) {
+        if (sender instanceof Player player) {
+            return getBedrockGuiConfig(getPlayerLanguage(player.getUniqueId()));
+        }
+        return getBedrockGuiConfig();
+    }
+
+    public FileConfiguration getBedrockGuiConfig(Player player) {
+        return getBedrockGuiConfig(getPlayerLanguage(player.getUniqueId()));
+    }
+
+    public FileConfiguration getBedrockGuiConfig(String language) {
+        String normalizedLanguage = language == null ? getDefaultLanguage() : language.toLowerCase(Locale.ROOT);
+        FileConfiguration config = bedrockGuiConfigs.get(normalizedLanguage);
+        if (config != null) {
+            return config;
+        }
+        config = bedrockGuiConfigs.get(getDefaultLanguage());
+        if (config != null) {
+            return config;
+        }
+        return bedrockGuiConfig != null ? bedrockGuiConfig : getGuiConfig(normalizedLanguage);
+    }
+
+    public Collection<FileConfiguration> getBedrockGuiConfigs() {
+        return Collections.unmodifiableCollection(bedrockGuiConfigs.values());
     }
 
     public Set<String> getAvailableLanguages() {
@@ -264,6 +299,9 @@ public final class LotteryPlugin extends JavaPlugin {
         copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui.yml"));
         copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui-de.yml"));
         copyDefaultReference("gui/gui.yml", new File(referenceFolder, "gui-en.yml"));
+        copyDefaultReference("gui/bedrock-gui.yml", new File(referenceFolder, "bedrock-gui.yml"));
+        copyDefaultReference("gui/bedrock-gui.yml", new File(referenceFolder, "bedrock-de.yml"));
+        copyDefaultReference("gui/bedrock-gui.yml", new File(referenceFolder, "bedrock-en.yml"));
         copyDefaultReference("holograms.yml", new File(referenceFolder, "holograms.yml"));
         copyDefaultReference("lotteries.yml", new File(referenceFolder, "lotteries.yml"));
         copyDefaultReference("lang/de.yml", new File(referenceFolder, "lang-de.yml"));
@@ -447,12 +485,16 @@ public final class LotteryPlugin extends JavaPlugin {
 
         File guiFolder = new File(getDataFolder(), "gui");
         File legacyGuiFile = new File(guiFolder, "gui.yml");
+        File legacyBedrockGuiFile = new File(guiFolder, "bedrock-gui.yml");
         ensureGuiFilesForLanguages(guiFolder, legacyGuiFile, languages);
+        ensureBedrockGuiFilesForLanguages(guiFolder, legacyBedrockGuiFile, languages);
 
         addSyncResult(results, "config.yml", new File(getDataFolder(), "config.yml"), reason);
         addSyncResult(results, "gui/gui.yml", legacyGuiFile, reason);
+        addSyncResult(results, "gui/bedrock-gui.yml", legacyBedrockGuiFile, reason);
         for (String language : languages.stream().sorted().toList()) {
             addSyncResult(results, "gui/gui.yml", new File(guiFolder, language + ".yml"), reason);
+            addSyncResult(results, "gui/bedrock-gui.yml", new File(guiFolder, "bedrock-" + language + ".yml"), reason);
         }
 
         addSyncResult(results, "holograms.yml", new File(getDataFolder(), "holograms.yml"), reason);
@@ -657,10 +699,14 @@ public final class LotteryPlugin extends JavaPlugin {
         for (File file : files) {
             String fileName = file.getName();
             String language = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
-            if (skipLegacyGuiFile && "gui".equals(language)) {
+            if (skipLegacyGuiFile && ("gui".equals(language) || "bedrock-gui".equals(language))) {
                 continue;
             }
-            languages.add(language);
+            if (skipLegacyGuiFile && language.startsWith("bedrock-")) {
+                languages.add(language.substring("bedrock-".length()));
+            } else {
+                languages.add(language);
+            }
         }
     }
 
@@ -711,6 +757,7 @@ public final class LotteryPlugin extends JavaPlugin {
         playerLanguagesConfig = YamlConfiguration.loadConfiguration(playerLanguagesFile);
         loadLanguageConfigs();
         loadGuiConfigs();
+        loadBedrockGuiConfigs();
     }
 
     private void loadLanguageConfigs() {
@@ -758,7 +805,7 @@ public final class LotteryPlugin extends JavaPlugin {
         for (File guiFile : guiFiles) {
             String fileName = guiFile.getName();
             String language = fileName.substring(0, fileName.length() - 4).toLowerCase(Locale.ROOT);
-            if ("gui".equals(language)) {
+            if ("gui".equals(language) || isBedrockGuiFileName(language)) {
                 continue;
             }
             guiConfigs.put(language, loadCustomConfigWithDefaults("gui/gui.yml", guiFile));
@@ -769,30 +816,76 @@ public final class LotteryPlugin extends JavaPlugin {
         }
     }
 
+    private void loadBedrockGuiConfigs() {
+        bedrockGuiConfigs.clear();
+        File guiFolder = new File(getDataFolder(), "gui");
+        if (!guiFolder.exists() && !guiFolder.mkdirs()) {
+            getLogger().warning("Could not create gui folder for Bedrock GUI.");
+            bedrockGuiConfig = new YamlConfiguration();
+            return;
+        }
+
+        File legacyBedrockGuiFile = new File(guiFolder, "bedrock-gui.yml");
+        bedrockGuiConfig = loadCustomConfigWithDefaults("gui/bedrock-gui.yml", legacyBedrockGuiFile);
+        ensureBedrockGuiFilesForLanguages(guiFolder, legacyBedrockGuiFile, getAvailableLanguages());
+
+        File[] guiFiles = guiFolder.listFiles((directory, name) ->
+            name.toLowerCase(Locale.ROOT).startsWith("bedrock-")
+                && name.toLowerCase(Locale.ROOT).endsWith(".yml")
+                && !"bedrock-gui.yml".equalsIgnoreCase(name));
+        if (guiFiles == null) {
+            return;
+        }
+
+        for (File guiFile : guiFiles) {
+            String fileName = guiFile.getName().toLowerCase(Locale.ROOT);
+            String language = fileName.substring("bedrock-".length(), fileName.length() - 4);
+            bedrockGuiConfigs.put(language, loadCustomConfigWithDefaults("gui/bedrock-gui.yml", guiFile));
+        }
+
+        if (!bedrockGuiConfigs.containsKey(getDefaultLanguage())) {
+            bedrockGuiConfigs.put(getDefaultLanguage(), bedrockGuiConfig);
+        }
+    }
+
+    private boolean isBedrockGuiFileName(String nameWithoutExtension) {
+        return "bedrock-gui".equals(nameWithoutExtension) || nameWithoutExtension.startsWith("bedrock-");
+    }
+
     private void ensureGuiFilesForLanguages(File guiFolder, File legacyGuiFile) {
         ensureGuiFilesForLanguages(guiFolder, legacyGuiFile, getAvailableLanguages());
     }
 
     private void ensureGuiFilesForLanguages(File guiFolder, File legacyGuiFile, Collection<String> languages) {
+        ensureGuiFilesForLanguages(guiFolder, legacyGuiFile, languages, "", "gui/gui.yml", "GUI language file");
+    }
+
+    private void ensureBedrockGuiFilesForLanguages(File guiFolder, File legacyBedrockGuiFile, Collection<String> languages) {
+        ensureGuiFilesForLanguages(guiFolder, legacyBedrockGuiFile, languages, "bedrock-", "gui/bedrock-gui.yml",
+            "Bedrock GUI language file");
+    }
+
+    private void ensureGuiFilesForLanguages(File guiFolder, File sourceFile, Collection<String> languages,
+                                            String prefix, String defaultResource, String logLabel) {
         if (!guiFolder.exists() && !guiFolder.mkdirs()) {
             getLogger().warning("Could not create gui folder.");
             return;
         }
 
         for (String language : languages) {
-            File languageGuiFile = new File(guiFolder, language + ".yml");
+            File languageGuiFile = new File(guiFolder, prefix + language + ".yml");
             if (languageGuiFile.exists()) {
                 continue;
             }
             try {
-                if (legacyGuiFile.exists()) {
-                    Files.copy(legacyGuiFile.toPath(), languageGuiFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                if (sourceFile.exists()) {
+                    Files.copy(sourceFile.toPath(), languageGuiFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 } else {
-                    copyDefaultReference("gui/gui.yml", languageGuiFile);
+                    copyDefaultReference(defaultResource, languageGuiFile);
                 }
-                getLogger().info("Created GUI language file: gui/" + language + ".yml");
+                getLogger().info("Created " + logLabel + ": gui/" + prefix + language + ".yml");
             } catch (IOException exception) {
-                getLogger().warning("Could not create GUI language file for " + language + ": " + exception.getMessage());
+                getLogger().warning("Could not create " + logLabel + " for " + language + ": " + exception.getMessage());
             }
         }
     }

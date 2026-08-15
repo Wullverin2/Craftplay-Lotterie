@@ -3,7 +3,7 @@ version: 1.0.0
 main: dev.codex.lottery.LotteryPlugin
 api-version: "1.21"
 depend: [Vault]
-softdepend: [PlaceholderAPI, CMI, Jobs, Quests, BeautyQuests, BetonQuest, PlayerHeads, HeadDatabase, LuckPerms]
+softdepend: [PlaceholderAPI, CMI, Jobs, Quests, BeautyQuests, BetonQuest, PlayerHeads, HeadDatabase, LuckPerms, floodgate]
 authors: [Codex]
 description: Craftplay Lotterie with GUI, PlaceholderAPI and webhook support.
 

@@ -140,6 +140,7 @@ public final class LotteryManager {
     private String operationLotteryId;
     private String seasonId;
     private double totalTaxCollected;
+    private final BedrockFormBridge bedrockForms;
 
     public LotteryManager(LotteryPlugin plugin, EconomyService economyService) {
         this.plugin = plugin;
@@ -148,6 +149,7 @@ public final class LotteryManager {
         this.logFile = new File(plugin.getDataFolder(), "admin-log.yml");
         this.transactionFile = new File(plugin.getDataFolder(), "transactions.yml");
         this.databaseStorage = new DatabaseStorageService(plugin);
+        this.bedrockForms = BedrockFormBridge.create(plugin);
     }
 
     public void load() {
@@ -448,6 +450,7 @@ public final class LotteryManager {
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "holograms.yml"), "holograms.yml");
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "lotteries.yml"), "lotteries.yml");
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "gui/gui.yml"), "gui/gui.yml");
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "gui/bedrock-gui.yml"), "gui/bedrock-gui.yml");
             File languageFolder = new File(plugin.getDataFolder(), "lang");
             File[] languageFiles = languageFolder.listFiles((directory, name) -> name.endsWith(".yml"));
             if (languageFiles != null) {
@@ -800,6 +803,7 @@ public final class LotteryManager {
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "holograms.yml"), "holograms.yml");
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "lotteries.yml"), "lotteries.yml");
             addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "gui/gui.yml"), "gui/gui.yml");
+            addFileToZip(zipOutputStream, new File(plugin.getDataFolder(), "gui/bedrock-gui.yml"), "gui/bedrock-gui.yml");
             File languageFolder = new File(plugin.getDataFolder(), "lang");
             File[] languageFiles = languageFolder.listFiles((directory, name) -> name.endsWith(".yml"));
             if (languageFiles != null) {
@@ -1610,6 +1614,8 @@ public final class LotteryManager {
         doctorLine(sender, "Sprachen", !plugin.getAvailableLanguages().isEmpty(), String.join(", ", plugin.getAvailableLanguages()));
         doctorLine(sender, "GUI-Sprachen", plugin.getGuiConfigs().size() >= plugin.getAvailableLanguages().size(),
             plugin.getGuiConfigs().size() + " GUI-Datei(en)");
+        doctorLine(sender, "Bedrock-GUI", !plugin.getBedrockGuiConfig().getBoolean("bedrock.enabled", true) || bedrockForms.isAvailable(),
+            bedrockForms.isAvailable() ? plugin.getBedrockGuiConfigs().size() + " Datei(en)" : "Floodgate optional/nicht geladen");
         doctorLine(sender, "Fairness", plugin.getConfig().getBoolean("fairness.enabled", true), "Seed/Hash pruefbar");
         doctorLine(sender, "Rollback", plugin.getConfig().getBoolean("rollback.enabled", true), "letzte Ziehung");
         int invalidHolograms = countInvalidHologramLocations();
@@ -3064,6 +3070,10 @@ public final class LotteryManager {
             showStatus(player);
             return;
         }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "gui");
+            return;
+        }
 
         Inventory inventory = Bukkit.createInventory(null, gui.getInt("gui.size", 27),
             MessageUtil.color(getMainGuiTitle(player)));
@@ -3126,6 +3136,221 @@ public final class LotteryManager {
             return profileTitle;
         }
         return gui(player).getString("gui.title", "&6Lottery");
+    }
+
+    public boolean shouldOpenBedrockGuiOnJoin(Player player) {
+        return shouldUseBedrockForms(player)
+            && plugin.getBedrockGuiConfig(player).getBoolean("bedrock.open-on-join", false);
+    }
+
+    private boolean shouldUseBedrockForms(Player player) {
+        return plugin.getBedrockGuiConfig(player).getBoolean("bedrock.enabled", true)
+            && bedrockForms.isAvailable()
+            && bedrockForms.isBedrockPlayer(player);
+    }
+
+    private void openBedrockMenu(Player player, String root) {
+        FileConfiguration bedrockGui = plugin.getBedrockGuiConfig(player);
+        if (!bedrockGui.getBoolean(root + ".enabled", true)) {
+            if (!"gui".equals(root)) {
+                openBedrockMenu(player, "gui");
+            } else {
+                showStatus(player);
+            }
+            return;
+        }
+
+        List<BedrockMenuEntry> entries = buildBedrockMenuEntries(player, bedrockGui, root);
+        if (entries.isEmpty()) {
+            entries.add(new BedrockMenuEntry(new BedrockFormButton(MessageUtil.color("&cSchliessen"), "", ""),
+                bedrockGui, root, "close"));
+        }
+
+        String title = resolveBedrockMenuTitle(player, bedrockGui, root);
+        String content = resolveBedrockMenuContent(player, bedrockGui, root);
+        boolean sent = bedrockForms.sendSimpleForm(player, title, content,
+            entries.stream().map(BedrockMenuEntry::button).toList(),
+            clickedButton -> handleBedrockMenuClick(player, root, entries, clickedButton));
+        if (!sent) {
+            showStatus(player);
+        }
+    }
+
+    private List<BedrockMenuEntry> buildBedrockMenuEntries(Player player, FileConfiguration bedrockGui, String root) {
+        List<BedrockMenuEntry> entries = new ArrayList<>();
+        if ("language-gui".equals(root) && bedrockGui.getBoolean("language-gui.auto-detect.enabled", true)) {
+            addBedrockLanguageEntries(player, bedrockGui, entries);
+        }
+        if ("profile-gui".equals(root) && bedrockGui.getBoolean("profile-gui.dynamic-profiles.enabled", true)) {
+            addBedrockProfileEntries(player, bedrockGui, entries);
+        }
+
+        addConfiguredBedrockEntries(player, bedrockGui, root, entries);
+        return entries;
+    }
+
+    private void addConfiguredBedrockEntries(Player player, FileConfiguration bedrockGui, String root,
+                                             List<BedrockMenuEntry> entries) {
+        ConfigurationSection itemsSection = bedrockGui.getConfigurationSection(root + ".items");
+        if (itemsSection == null) {
+            return;
+        }
+
+        for (String key : itemsSection.getKeys(false).stream()
+            .sorted(Comparator.comparingInt(key -> bedrockGui.getInt(root + ".items." + key + ".order",
+                bedrockGui.getInt(root + ".items." + key + ".slot", Integer.MAX_VALUE))))
+            .toList()) {
+            String bedrockPath = root + ".items." + key;
+            if (!isGuiItemVisible(player, bedrockGui, bedrockPath)) {
+                continue;
+            }
+
+            FileConfiguration actionConfig = bedrockGui;
+            String actionPath = bedrockPath;
+            FileConfiguration javaGui = gui(player);
+            String javaItemPath = bedrockGui.getString(bedrockPath + ".java-item", "");
+            if (javaItemPath != null && !javaItemPath.isBlank() && javaGui.isConfigurationSection(javaItemPath)) {
+                if (!isGuiItemVisible(player, javaGui, javaItemPath)) {
+                    continue;
+                }
+                actionConfig = javaGui;
+                actionPath = javaItemPath;
+            }
+
+            entries.add(new BedrockMenuEntry(
+                buildBedrockButton(player, bedrockGui, bedrockPath, actionConfig, actionPath),
+                actionConfig,
+                actionPath,
+                ""
+            ));
+        }
+    }
+
+    private void addBedrockLanguageEntries(Player player, FileConfiguration bedrockGui, List<BedrockMenuEntry> entries) {
+        List<String> languages = plugin.getAvailableLanguages().stream().sorted().toList();
+        for (String language : languages) {
+            Map<String, String> placeholders = createCommonPlaceholders(player);
+            placeholders.put("language", language);
+            placeholders.put("language_name", plugin.getLanguageDisplayName(language));
+            placeholders.put("selected", language.equalsIgnoreCase(plugin.getPlayerLanguage(player.getUniqueId()))
+                ? "ausgewaehlt" : "");
+            String name = MessageUtil.raw(player, bedrockGui, "language-gui.auto-detect.button-name", placeholders);
+            List<String> lore = MessageUtil.rawList(player, bedrockGui, "language-gui.auto-detect.button-lore", placeholders);
+            entries.add(new BedrockMenuEntry(
+                new BedrockFormButton(formatBedrockButtonText(bedrockGui, name, lore), "", ""),
+                bedrockGui,
+                "language-gui.auto-detect",
+                "language:" + language
+            ));
+        }
+    }
+
+    private void addBedrockProfileEntries(Player player, FileConfiguration bedrockGui, List<BedrockMenuEntry> entries) {
+        for (String profileId : getSelectableLotteryProfileIds(player)) {
+            boolean selected = profileId.equalsIgnoreCase(getSelectedLotteryId(player));
+            Map<String, String> placeholders = createCommonPlaceholders(player);
+            placeholders.put("profile_id", profileId);
+            placeholders.put("profile_name", getLotteryDisplayName(profileId));
+            placeholders.put("profile_pot", withLotteryContext(profileId, () -> economyService.format(getTotalPot())));
+            placeholders.put("profile_tickets", withLotteryContext(profileId, () -> String.valueOf(currentRound().getTotalTickets())));
+            placeholders.put("selected_color", selected ? "&a" : "&e");
+            placeholders.put("selected_text", selected ? "&aAktuell ausgewaehlt" : "&7Klicken zum Auswaehlen");
+
+            String name = MessageUtil.raw(player, bedrockGui, "profile-gui.dynamic-profiles.button-name", placeholders);
+            List<String> lore = MessageUtil.rawList(player, bedrockGui, "profile-gui.dynamic-profiles.button-lore", placeholders);
+            entries.add(new BedrockMenuEntry(
+                new BedrockFormButton(formatBedrockButtonText(bedrockGui, name, lore), "", ""),
+                bedrockGui,
+                "profile-gui.dynamic-profiles",
+                "profile:" + profileId
+            ));
+        }
+    }
+
+    private BedrockFormButton buildBedrockButton(Player player, FileConfiguration bedrockGui, String bedrockPath,
+                                                 FileConfiguration actionConfig, String actionPath) {
+        Map<String, String> placeholders = createItemPlaceholders(player, actionConfig, actionPath);
+        FileConfiguration displayConfig = actionConfig;
+        String displayPath = actionPath;
+        if (bedrockGui.contains(bedrockPath + ".name", true)) {
+            displayConfig = bedrockGui;
+            displayPath = bedrockPath;
+        }
+
+        String name = MessageUtil.raw(player, displayConfig, displayPath + ".name", placeholders);
+        List<String> lore = displayConfig.contains(displayPath + ".lore", true)
+            ? expandStatsLore(MessageUtil.rawList(player, displayConfig, displayPath + ".lore", placeholders))
+            : List.of();
+        if (bedrockGui.contains(bedrockPath + ".lore", true)) {
+            lore = expandStatsLore(MessageUtil.rawList(player, bedrockGui, bedrockPath + ".lore", placeholders));
+        }
+
+        String imageType = bedrockGui.getString(bedrockPath + ".image.type", "");
+        String imageData = MessageUtil.format(player, bedrockGui.getString(bedrockPath + ".image.data", ""), placeholders);
+        return new BedrockFormButton(formatBedrockButtonText(bedrockGui, name, lore), imageType, imageData);
+    }
+
+    private String formatBedrockButtonText(FileConfiguration bedrockGui, String name, List<String> lore) {
+        int loreLines = Math.max(0, bedrockGui.getInt("bedrock.button-lore-lines", 1));
+        String loreText = lore.stream().filter(line -> !line.isBlank()).limit(loreLines).reduce((a, b) -> a + "\n" + b).orElse("");
+        String format = bedrockGui.getString("bedrock.button-format", "%name%\\n%lore%");
+        if (format == null || format.isBlank()) {
+            format = "%name%\\n%lore%";
+        }
+        return MessageUtil.color(format.replace("\\n", "\n")
+            .replace("%name%", name)
+            .replace("%lore%", loreText)).trim();
+    }
+
+    private String resolveBedrockMenuTitle(Player player, FileConfiguration bedrockGui, String root) {
+        Map<String, String> placeholders = createCommonPlaceholders(player);
+        String configuredTitle = bedrockGui.getString(root + ".title", "");
+        if (configuredTitle == null || configuredTitle.isBlank()) {
+            configuredTitle = gui(player).getString(root + ".title", "gui".equals(root) ? getMainGuiTitle(player) : "&6Lotterie");
+        }
+        return MessageUtil.format(player, configuredTitle, placeholders);
+    }
+
+    private String resolveBedrockMenuContent(Player player, FileConfiguration bedrockGui, String root) {
+        Map<String, String> placeholders = createCommonPlaceholders(player);
+        placeholders.put("bedrock_last_winners", String.join("\n", formatLastWinners()));
+        placeholders.put("bedrock_top_tickets", String.join("\n", formatCurrentTicketTop()));
+
+        List<String> lines = bedrockGui.getStringList(root + ".content");
+        if (lines.isEmpty()) {
+            lines = List.of("&7Topf: &f%pot%", "&7Tickets: &f%tickets_total%", "&7Naechste Ziehung: &f%next_draw%");
+        }
+        return lines.stream()
+            .map(line -> MessageUtil.format(player, line, placeholders))
+            .reduce((a, b) -> a + "\n" + b)
+            .orElse("");
+    }
+
+    private void handleBedrockMenuClick(Player player, String root, List<BedrockMenuEntry> entries, int clickedButton) {
+        if (!player.isOnline() || clickedButton < 0 || clickedButton >= entries.size()) {
+            return;
+        }
+
+        BedrockMenuEntry entry = entries.get(clickedButton);
+        if (entry.specialAction().startsWith("language:")) {
+            String language = entry.specialAction().substring("language:".length()).toLowerCase(Locale.ROOT);
+            plugin.setPlayerLanguage(player.getUniqueId(), language);
+            MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.language-changed");
+            openMenu(player);
+            return;
+        }
+        if (entry.specialAction().startsWith("profile:")) {
+            setPlayerLottery(player, entry.specialAction().substring("profile:".length()), true);
+            return;
+        }
+        if ("close".equals(entry.specialAction())) {
+            return;
+        }
+
+        boolean refresh = handleItemActions(player, entry.actionConfig(), entry.actionPath());
+        if (refresh && shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, root);
+        }
     }
 
     public void handleMenuClick(Player player, String title, int slot) {
@@ -3217,6 +3442,10 @@ public final class LotteryManager {
             openMenu(player);
             return;
         }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "stats-gui");
+            return;
+        }
 
         Inventory inventory = Bukkit.createInventory(null, gui.getInt("stats-gui.size", 54),
             MessageUtil.color(gui.getString("stats-gui.title", "&6Lottery Statistik")));
@@ -3237,6 +3466,11 @@ public final class LotteryManager {
     }
 
     public void openWinnerWall(Player player) {
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "winner-wall-gui");
+            return;
+        }
+
         FileConfiguration gui = gui(player);
         int size = gui.getInt("winner-wall-gui.size", 54);
         Inventory inventory = Bukkit.createInventory(null, size,
@@ -3274,6 +3508,10 @@ public final class LotteryManager {
             openMenu(player);
             return;
         }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "personal-stats-gui");
+            return;
+        }
 
         Inventory inventory = Bukkit.createInventory(null, gui.getInt("personal-stats-gui.size", 27),
             MessageUtil.color(gui.getString("personal-stats-gui.title", "&6Deine Statistik")));
@@ -3294,6 +3532,11 @@ public final class LotteryManager {
     }
 
     public void openLanguageMenu(Player player) {
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "language-gui");
+            return;
+        }
+
         FileConfiguration gui = gui(player);
         Inventory inventory = Bukkit.createInventory(null, gui.getInt("language-gui.size", 27),
             MessageUtil.color(gui.getString("language-gui.title", "&6Sprache")));
@@ -3384,6 +3627,10 @@ public final class LotteryManager {
             showStatus(player);
             return;
         }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "admin-gui");
+            return;
+        }
 
         Inventory inventory = Bukkit.createInventory(null, gui.getInt("admin-gui.size", 27),
             MessageUtil.color(gui.getString("admin-gui.title", "&cLotterie Admin")));
@@ -3406,6 +3653,10 @@ public final class LotteryManager {
     public void openProfileMenu(Player player) {
         if (!areLotteryProfilesEnabled()) {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.profiles-disabled");
+            return;
+        }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "profile-gui");
             return;
         }
 
@@ -3490,6 +3741,10 @@ public final class LotteryManager {
     public void openAdminOverviewMenu(Player player) {
         if (!player.hasPermission("lottery.admin")) {
             MessageUtil.send(player, plugin.getMessagesConfig(player), "messages.no-permission");
+            return;
+        }
+        if (shouldUseBedrockForms(player)) {
+            openBedrockMenu(player, "admin-overview-gui");
             return;
         }
 
@@ -6711,12 +6966,12 @@ public final class LotteryManager {
     }
 
     private void setConfiguredItem(Inventory inventory, Player player, String path) {
-        if (!isGuiItemVisible(player, path)) {
+        FileConfiguration gui = gui(player);
+        if (!isGuiItemVisible(player, gui, path)) {
             return;
         }
 
-        FileConfiguration gui = gui(player);
-        Map<String, String> placeholders = createItemPlaceholders(player, path);
+        Map<String, String> placeholders = createItemPlaceholders(player, gui, path);
         List<Integer> slots = getGuiSlots(player, path);
         if (slots.isEmpty()) {
             return;
@@ -6739,8 +6994,12 @@ public final class LotteryManager {
     }
 
     private Map<String, String> createItemPlaceholders(Player player, String path) {
+        return createItemPlaceholders(player, gui(player), path);
+    }
+
+    private Map<String, String> createItemPlaceholders(Player player, FileConfiguration gui, String path) {
         Map<String, String> placeholders = createCommonPlaceholders(player);
-        int buyAmount = getConfiguredBuyAmount(player, path);
+        int buyAmount = getConfiguredBuyAmount(gui, path);
         placeholders.put("buy_amount", String.valueOf(buyAmount));
         placeholders.put("buy_price", economyService.format(calculateTicketCost(buyAmount)));
         return placeholders;
@@ -7028,7 +7287,7 @@ public final class LotteryManager {
         String matchingPath = null;
         for (String key : itemsSection.getKeys(false)) {
             String path = itemsPath + "." + key;
-            if (!isGuiItemVisible(player, path)) {
+            if (!isGuiItemVisible(player, gui, path)) {
                 continue;
             }
             if (getGuiSlots(gui, path).contains(clickedSlot)) {
@@ -7039,7 +7298,10 @@ public final class LotteryManager {
     }
 
     private boolean isGuiItemVisible(Player player, String path) {
-        FileConfiguration gui = gui(player);
+        return isGuiItemVisible(player, gui(player), path);
+    }
+
+    private boolean isGuiItemVisible(Player player, FileConfiguration gui, String path) {
         if (!gui.getBoolean(path + ".enabled", true)) {
             return false;
         }
@@ -7047,7 +7309,7 @@ public final class LotteryManager {
         String permission = gui.getString(path + ".permission",
             gui.getString(path + ".view-permission", ""));
         if (permission == null || permission.isBlank()) {
-            permission = inferGuiItemPermission(player, path);
+            permission = inferGuiItemPermission(gui, path);
         }
 
         if (permission == null || permission.isBlank() || player.hasPermission(permission)) {
@@ -7057,7 +7319,11 @@ public final class LotteryManager {
     }
 
     private String inferGuiItemPermission(Player player, String path) {
-        for (String action : gui(player).getStringList(path + ".actions")) {
+        return inferGuiItemPermission(gui(player), path);
+    }
+
+    private String inferGuiItemPermission(FileConfiguration gui, String path) {
+        for (String action : gui.getStringList(path + ".actions")) {
             String normalizedAction = action.trim().toLowerCase(Locale.ROOT);
             if (normalizedAction.equals("open-admin")
                 || normalizedAction.equals("player:/lottery admin")
@@ -7071,13 +7337,16 @@ public final class LotteryManager {
     }
 
     private boolean handleItemActions(Player player, String path) {
-        FileConfiguration gui = gui(player);
-        Map<String, String> placeholders = createItemPlaceholders(player, path);
+        return handleItemActions(player, gui(player), path);
+    }
+
+    private boolean handleItemActions(Player player, FileConfiguration gui, String path) {
+        Map<String, String> placeholders = createItemPlaceholders(player, gui, path);
         boolean refresh = gui.getBoolean(path + ".refresh-after-click", true);
         boolean handledAction = false;
 
         List<String> actions = gui.getStringList(path + ".actions");
-        if (actions.isEmpty() && getConfiguredBuyAmount(player, path) > 0) {
+        if (actions.isEmpty() && getConfiguredBuyAmount(gui, path) > 0) {
             actions = List.of("buy:%buy_amount%");
         }
 
@@ -7233,7 +7502,11 @@ public final class LotteryManager {
     }
 
     private int getConfiguredBuyAmount(Player player, String path) {
-        int configuredAmount = gui(player).getInt(path + ".buy-amount", 0);
+        return getConfiguredBuyAmount(gui(player), path);
+    }
+
+    private int getConfiguredBuyAmount(FileConfiguration gui, String path) {
+        int configuredAmount = gui.getInt(path + ".buy-amount", 0);
         if (configuredAmount > 0) {
             return configuredAmount;
         }
@@ -7437,6 +7710,14 @@ public final class LotteryManager {
     }
 
     private record TopEntry(String name, String value) {
+    }
+
+    private record BedrockMenuEntry(
+        BedrockFormButton button,
+        FileConfiguration actionConfig,
+        String actionPath,
+        String specialAction
+    ) {
     }
 
     private record AdminStatsSnapshot(

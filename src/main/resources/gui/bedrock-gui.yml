@@ -1,0 +1,290 @@
+# Craftplay Lotterie - Bedrock-GUI / Bedrock GUI
+# DE: Diese Datei steuert die Floodgate/Cumulus-Formulare fuer Bedrock-Spieler.
+# EN: This file controls the Floodgate/Cumulus forms for Bedrock players.
+# DE: java-item verweist auf einen Button aus gui.yml. Name, Lore, Permission und Aktionen koennen dadurch uebernommen werden.
+# EN: java-item points to a button from gui.yml. Name, lore, permission and actions can be inherited from it.
+# DE: Eigene Bedrock-Buttons koennen name, lore, actions und optional image.type/image.data nutzen.
+# EN: Custom Bedrock buttons can use name, lore, actions and optional image.type/image.data.
+
+bedrock:
+  # DE: Aktiviert Bedrock-Formulare fuer Floodgate-Spieler. Java-Spieler nutzen weiterhin das normale Inventar-GUI.
+  # EN: Enables Bedrock forms for Floodgate players. Java players still use the normal inventory GUI.
+  enabled: true
+  # DE: Wenn true, wird Bedrock-Spielern beim Join automatisch das Formular geoeffnet.
+  # EN: When true, Bedrock players automatically see the form on join.
+  open-on-join: false
+  # DE: Anzahl Lore-Zeilen, die unter dem Buttonnamen angezeigt werden.
+  # EN: Number of lore lines shown below the button name.
+  button-lore-lines: 1
+  # DE: Format eines Buttons. Platzhalter: %name%, %lore%.
+  # EN: Button format. Placeholders: %name%, %lore%.
+  button-format: "%name%\n%lore%"
+
+gui:
+  enabled: true
+  title: "&6&lCraftplay Lotterie"
+  content:
+    - "&7Topf: &f%pot%"
+    - "&7Tickets: &f%tickets_total%"
+    - "&7Teilnehmer: &f%players%/%min_players%"
+    - "&7Naechste Ziehung: &f%next_draw%"
+  items:
+    buy-small:
+      enabled: true
+      java-item: "gui.items.buy-small"
+    buy-medium:
+      enabled: true
+      java-item: "gui.items.buy-medium"
+    buy-large:
+      enabled: true
+      java-item: "gui.items.buy-large"
+    buy-very-large:
+      enabled: true
+      java-item: "gui.items.buy-very-large"
+    statistics:
+      enabled: true
+      java-item: "gui.items.statistics"
+    personal-statistics:
+      enabled: true
+      java-item: "gui.items.personal-statistics"
+    language:
+      enabled: true
+      java-item: "gui.items.language"
+    album:
+      enabled: false
+      java-item: "gui.items.album"
+    claims:
+      enabled: false
+      java-item: "gui.items.claims"
+    lucky-number:
+      enabled: false
+      java-item: "gui.items.lucky-number"
+    watch-draw:
+      enabled: false
+      java-item: "gui.items.watch-draw"
+    profiles:
+      enabled: false
+      java-item: "gui.items.profiles"
+    season-shop:
+      enabled: false
+      java-item: "gui.items.season-shop"
+    free-ticket:
+      enabled: false
+      java-item: "gui.items.free-ticket"
+    admin:
+      enabled: true
+      java-item: "gui.items.admin"
+    close:
+      enabled: true
+      java-item: "gui.items.close"
+
+stats-gui:
+  enabled: true
+  title: "&6&lLotterie Statistik"
+  content:
+    - "&7Toplisten und Gewinner der Lotterie."
+  items:
+    most-played:
+      enabled: true
+      java-item: "stats-gui.items.most-played"
+    most-tickets:
+      enabled: true
+      java-item: "stats-gui.items.most-tickets"
+    most-spent:
+      enabled: true
+      java-item: "stats-gui.items.most-spent"
+    most-wins:
+      enabled: true
+      java-item: "stats-gui.items.most-wins"
+    highest-win:
+      enabled: true
+      java-item: "stats-gui.items.highest-win"
+    total-won:
+      enabled: true
+      java-item: "stats-gui.items.total-won"
+    current-tickets:
+      enabled: true
+      java-item: "stats-gui.items.current-tickets"
+    last-winners:
+      enabled: true
+      java-item: "stats-gui.items.last-winners"
+    back:
+      enabled: true
+      java-item: "stats-gui.items.back"
+
+personal-stats-gui:
+  enabled: true
+  title: "&6&lDeine Lotterie Statistik"
+  content:
+    - "&7Deine Tickets: &f%tickets%"
+    - "&7Deine Chance: &f%chance%"
+    - "&7Aktueller Topf: &f%pot%"
+  items:
+    overview:
+      enabled: true
+      java-item: "personal-stats-gui.items.overview"
+    buy:
+      enabled: true
+      java-item: "personal-stats-gui.items.buy"
+    back:
+      enabled: true
+      java-item: "personal-stats-gui.items.back"
+    close:
+      enabled: true
+      java-item: "personal-stats-gui.items.close"
+
+language-gui:
+  enabled: true
+  title: "&6&lSprache"
+  content:
+    - "&7Waehle deine Sprache."
+  auto-detect:
+    enabled: true
+    button-name: "&a%language_name%"
+    button-lore:
+      - "&7Code: &f%language%"
+      - "&7Status: &f%selected%"
+  items:
+    back:
+      enabled: true
+      java-item: "language-gui.items.back"
+
+winner-wall-gui:
+  enabled: true
+  title: "&6&lGewinnerwand"
+  content:
+    - "&7Letzte Gewinner:"
+    - "%bedrock_last_winners%"
+  items:
+    back:
+      enabled: true
+      name: "&aZurueck"
+      lore:
+        - "&7Zurueck zur Statistik."
+      actions:
+        - "open-stats"
+
+profile-gui:
+  enabled: true
+  title: "&6&lLotterie auswaehlen"
+  content:
+    - "&7Waehle dein Lotterie-Profil."
+  dynamic-profiles:
+    enabled: true
+    button-name: "%selected_color%%profile_name%"
+    button-lore:
+      - "&7ID: &f%profile_id%"
+      - "&7Topf: &f%profile_pot%"
+      - "&7Tickets: &f%profile_tickets%"
+      - "%selected_text%"
+  items:
+    back:
+      enabled: true
+      name: "&aZurueck"
+      lore:
+        - "&7Zurueck zur Lotterie."
+      actions:
+        - "open-main"
+
+admin-gui:
+  enabled: true
+  title: "&c&lLotterie Admin"
+  content:
+    - "&7Administrative Lotterie-Aktionen."
+  items:
+    status:
+      enabled: true
+      java-item: "admin-gui.items.status"
+    force-draw:
+      enabled: true
+      java-item: "admin-gui.items.force-draw"
+    simulate:
+      enabled: true
+      java-item: "admin-gui.items.simulate"
+    notifications:
+      enabled: true
+      java-item: "admin-gui.items.notifications"
+    log:
+      enabled: true
+      java-item: "admin-gui.items.log"
+    reload:
+      enabled: true
+      java-item: "admin-gui.items.reload"
+    reset:
+      enabled: true
+      java-item: "admin-gui.items.reset"
+    debug:
+      enabled: true
+      java-item: "admin-gui.items.debug"
+    doctor:
+      enabled: true
+      java-item: "admin-gui.items.doctor"
+    backup:
+      enabled: true
+      java-item: "admin-gui.items.backup"
+    transactions:
+      enabled: true
+      java-item: "admin-gui.items.transactions"
+    holograms:
+      enabled: true
+      java-item: "admin-gui.items.holograms"
+    lotteries:
+      enabled: true
+      java-item: "admin-gui.items.lotteries"
+    export-csv:
+      enabled: true
+      java-item: "admin-gui.items.export-csv"
+    placeholder-docs:
+      enabled: true
+      java-item: "admin-gui.items.placeholder-docs"
+    season-reset:
+      enabled: true
+      java-item: "admin-gui.items.season-reset"
+    back:
+      enabled: true
+      java-item: "admin-gui.items.back"
+    close:
+      enabled: true
+      java-item: "admin-gui.items.close"
+
+admin-overview-gui:
+  enabled: true
+  title: "&c&lAdmin Uebersicht"
+  content:
+    - "&7Waehle eine Admin-Uebersicht."
+  items:
+    rounds:
+      enabled: true
+      name: "&eAktive Runden"
+      lore:
+        - "&7Zeigt Tickets und Topf je Profil."
+      actions:
+        - "player:/lottery rounds"
+    transactions:
+      enabled: true
+      name: "&aTransaktionen"
+      lore:
+        - "&7Zeigt die Transaktionen im Chat."
+      actions:
+        - "player:/lottery transactions"
+    log:
+      enabled: true
+      name: "&eAdmin-Log"
+      lore:
+        - "&7Zeigt das Admin-Log."
+      actions:
+        - "player:/lottery log"
+    payments:
+      enabled: true
+      name: "&bOffene Zahlungen"
+      lore:
+        - "&7Zeigt ausstehende Zahlungen."
+      actions:
+        - "player:/lottery payments"
+    back:
+      enabled: true
+      name: "&aZurueck"
+      lore:
+        - "&7Zurueck zum Admin-Menue."
+      actions:
+        - "open-admin"

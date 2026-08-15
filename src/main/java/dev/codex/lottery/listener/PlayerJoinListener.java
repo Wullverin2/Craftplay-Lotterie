@@ -21,6 +21,13 @@ public final class PlayerJoinListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         lotteryManager.sendPendingNotifications(event.getPlayer());
         plugin.getUpdateChecker().notifyPlayerOnJoin(event.getPlayer());
+        if (lotteryManager.shouldOpenBedrockGuiOnJoin(event.getPlayer())) {
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                if (event.getPlayer().isOnline()) {
+                    lotteryManager.openMenu(event.getPlayer());
+                }
+            }, 40L);
+        }
 
         if (!plugin.getConfig().getBoolean("notifications.join-reminder.enabled", true)) {
             return;
