@@ -9,24 +9,19 @@ import org.bukkit.entity.Player;
 public interface BedrockFormBridge {
 
     static BedrockFormBridge create(LotteryPlugin plugin) {
-        if (!isFloodgateEnabled(plugin)) {
-            return disabled();
-        }
-
         try {
             Class<?> bridgeClass = Class.forName("dev.codex.lottery.hook.FloodgateBedrockFormBridge");
             Constructor<?> constructor = bridgeClass.getConstructor(LotteryPlugin.class);
             return (BedrockFormBridge) constructor.newInstance(plugin);
-        } catch (ReflectiveOperationException | LinkageError exception) {
-            plugin.getLogger().warning("Floodgate was detected, but Bedrock forms could not be enabled: "
+        } catch (LinkageError exception) {
+            plugin.getLogger().fine("Bedrock forms are disabled because the Floodgate API is not available: "
+                + exception.getMessage());
+            return disabled();
+        } catch (ReflectiveOperationException exception) {
+            plugin.getLogger().warning("Bedrock forms could not be enabled: "
                 + exception.getMessage());
             return disabled();
         }
-    }
-
-    private static boolean isFloodgateEnabled(LotteryPlugin plugin) {
-        return plugin.getServer().getPluginManager().isPluginEnabled("floodgate")
-            || plugin.getServer().getPluginManager().isPluginEnabled("Floodgate");
     }
 
     static BedrockFormBridge disabled() {

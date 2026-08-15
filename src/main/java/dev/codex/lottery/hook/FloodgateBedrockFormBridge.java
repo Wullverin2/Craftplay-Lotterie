@@ -22,19 +22,20 @@ public final class FloodgateBedrockFormBridge implements BedrockFormBridge {
 
     @Override
     public boolean isAvailable() {
-        return plugin.getServer().getPluginManager().isPluginEnabled("floodgate")
-            || plugin.getServer().getPluginManager().isPluginEnabled("Floodgate");
+        return floodgateApi() != null;
     }
 
     @Override
     public boolean isBedrockPlayer(Player player) {
-        return isAvailable() && FloodgateApi.getInstance().isFloodgatePlayer(player.getUniqueId());
+        FloodgateApi api = floodgateApi();
+        return api != null && api.isFloodgatePlayer(player.getUniqueId());
     }
 
     @Override
     public boolean sendSimpleForm(Player player, String title, String content, List<BedrockFormButton> buttons,
                                   IntConsumer clickHandler) {
-        if (!isBedrockPlayer(player)) {
+        FloodgateApi api = floodgateApi();
+        if (api == null || !api.isFloodgatePlayer(player.getUniqueId())) {
             return false;
         }
 
@@ -53,7 +54,15 @@ public final class FloodgateBedrockFormBridge implements BedrockFormBridge {
             }
         }
 
-        return FloodgateApi.getInstance().sendForm(player.getUniqueId(), builder);
+        return api.sendForm(player.getUniqueId(), builder);
+    }
+
+    private FloodgateApi floodgateApi() {
+        try {
+            return FloodgateApi.getInstance();
+        } catch (IllegalStateException | LinkageError exception) {
+            return null;
+        }
     }
 
     private FormImage.Type parseImageType(String value) {
