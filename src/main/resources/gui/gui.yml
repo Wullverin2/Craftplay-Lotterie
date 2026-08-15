@@ -47,20 +47,6 @@ gui:
         - "&aKlicken zum Kaufen"
       actions:
         - "buy:%buy_amount%"
-    buy-medium:
-      enabled: true
-      slot: 11
-      material: "GOLD_INGOT"
-      buy-amount: 1
-      refresh-after-click: true
-      name: "&e%buy_amount% Tickets kaufen"
-      lore:
-        - "&7Preis: &f%buy_price%"
-        - "&7Gekaufte Tickets: &f%tickets_total%"
-        - "&7Topf: &f%pot%"
-        - "&aKlicken zum Kaufen"
-      actions:
-        - "buy:%buy_amount%"
     pot-info:
       enabled: true
       slot: 13
@@ -74,34 +60,6 @@ gui:
         - "&7Teilnehmer: &f%players%/%min_players%"
         - "&7Nächste Ziehung: &f%next_draw%"
       actions: []
-    buy-large:
-      enabled: true
-      slot: 15
-      material: "GOLD_BLOCK"
-      buy-amount: 1
-      refresh-after-click: true
-      name: "&e%buy_amount% Tickets kaufen"
-      lore:
-        - "&7Preis: &f%buy_price%"
-        - "&7Gekaufte Tickets: &f%tickets_total%"
-        - "&7Topf: &f%pot%"
-        - "&aKlicken zum Kaufen"
-      actions:
-        - "buy:%buy_amount%"
-    buy-very-large:
-      enabled: true
-      slot: 16
-      material: "EMERALD"
-      buy-amount: 1
-      refresh-after-click: true
-      name: "&e%buy_amount% Tickets kaufen"
-      lore:
-        - "&7Preis: &f%buy_price%"
-        - "&7Gekaufte Tickets: &f%tickets_total%"
-        - "&7Topf: &f%pot%"
-        - "&aKlicken zum Kaufen"
-      actions:
-        - "buy:%buy_amount%"
     player-head:
       enabled: true
       slot: 22
@@ -213,7 +171,7 @@ gui:
       name: "&6Ziehung ansehen"
       lore:
         - "&7Schaltet das Animations-GUI"
-        - "&7fuer die naechste Ziehung um."
+        - "&7für die nächste Ziehung um."
         - "&aKlicken zum Umschalten"
       actions:
         - "watch-draw"

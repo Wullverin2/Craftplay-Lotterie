@@ -27,20 +27,11 @@ gui:
     - "&7Topf: &f%pot%"
     - "&7Tickets: &f%tickets_total%"
     - "&7Teilnehmer: &f%players%/%min_players%"
-    - "&7Naechste Ziehung: &f%next_draw%"
+    - "&7Nächste Ziehung: &f%next_draw%"
   items:
     buy-small:
       enabled: true
       java-item: "gui.items.buy-small"
-    buy-medium:
-      enabled: true
-      java-item: "gui.items.buy-medium"
-    buy-large:
-      enabled: true
-      java-item: "gui.items.buy-large"
-    buy-very-large:
-      enabled: true
-      java-item: "gui.items.buy-very-large"
     statistics:
       enabled: true
       java-item: "gui.items.statistics"

@@ -3318,7 +3318,7 @@ public final class LotteryManager {
 
         List<String> lines = bedrockGui.getStringList(root + ".content");
         if (lines.isEmpty()) {
-            lines = List.of("&7Topf: &f%pot%", "&7Tickets: &f%tickets_total%", "&7Naechste Ziehung: &f%next_draw%");
+            lines = List.of("&7Topf: &f%pot%", "&7Tickets: &f%tickets_total%", "&7Nächste Ziehung: &f%next_draw%");
         }
         return lines.stream()
             .map(line -> MessageUtil.format(player, line, placeholders))
