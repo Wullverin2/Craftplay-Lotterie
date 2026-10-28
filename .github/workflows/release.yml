@@ -108,11 +108,22 @@ jobs:
             CHANGES="- Keine neuen Commit-Eintraege gefunden."
           fi
 
+          RELEASE_DETAILS=""
+          if [ -f CHANGELOG.md ]; then
+            RELEASE_DETAILS="$(awk -v heading="## $VERSION" '$0 == heading { found=1; next } found && /^## / { exit } found { print }' CHANGELOG.md)"
+          fi
+
           {
             echo "## Craftplay Lotterie $TAG"
             echo
             echo "Build: \`${GITHUB_SHA::7}\`"
             echo
+            if [ -n "$RELEASE_DETAILS" ]; then
+              echo "### Release-Details"
+              echo
+              echo "$RELEASE_DETAILS"
+              echo
+            fi
             echo "### $HEADING"
             echo
             echo "$CHANGES"

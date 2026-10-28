@@ -10,6 +10,17 @@ import org.bukkit.entity.Player;
 
 public final class MessageUtil {
 
+    private static final java.util.regex.Pattern PLACEHOLDERS = java.util.regex.Pattern.compile("%([a-zA-Z0-9_]+)%");
+    private static volatile java.lang.reflect.Method placeholderMethod;
+
+    public static java.util.regex.Pattern placeholderPattern() {
+        return PLACEHOLDERS;
+    }
+
+    public static void resetHooks() {
+        placeholderMethod = null;
+    }
+
     private MessageUtil() {
     }
 
@@ -59,6 +70,9 @@ public final class MessageUtil {
     }
 
     private static String replace(String message, Map<String, String> values, String prefix) {
+        if (message.indexOf('%') < 0) {
+            return prefix + message;
+        }
         String result = message;
         for (Map.Entry<String, String> entry : values.entrySet()) {
             result = result.replace("%" + entry.getKey() + "%", entry.getValue());
@@ -67,16 +81,19 @@ public final class MessageUtil {
     }
 
     private static String applyExternalPlaceholders(Player player, String text) {
-        if (player == null || !Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+        if (player == null || text.indexOf('%') < 0 || !Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             return text;
         }
 
         try {
-            Class<?> placeholderApi = Class.forName("me.clip.placeholderapi.PlaceholderAPI");
-            return (String) placeholderApi
-                .getMethod("setPlaceholders", org.bukkit.OfflinePlayer.class, String.class)
-                .invoke(null, player, text);
-        } catch (ReflectiveOperationException exception) {
+            java.lang.reflect.Method method = placeholderMethod;
+            if (method == null) {
+                method = Class.forName("me.clip.placeholderapi.PlaceholderAPI")
+                    .getMethod("setPlaceholders", org.bukkit.OfflinePlayer.class, String.class);
+                placeholderMethod = method;
+            }
+            return (String) method.invoke(null, player, text);
+        } catch (ReflectiveOperationException | LinkageError exception) {
             return text;
         }
     }

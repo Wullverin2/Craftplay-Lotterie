@@ -126,6 +126,10 @@ public final class LotteryPlugin extends JavaPlugin {
         return getLanguageConfig(getDefaultLanguage());
     }
 
+    public Collection<FileConfiguration> getLanguageConfigs() {
+        return Collections.unmodifiableCollection(languageConfigs.values());
+    }
+
     public FileConfiguration getMessagesConfig(CommandSender sender) {
         if (sender instanceof Player player) {
             return getLanguageConfig(getPlayerLanguage(player.getUniqueId()));

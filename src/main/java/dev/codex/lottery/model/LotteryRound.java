@@ -2,6 +2,7 @@ package dev.codex.lottery.model;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -10,14 +11,16 @@ public final class LotteryRound {
     private final Map<UUID, Integer> ticketsByPlayer = new HashMap<>();
     private final Map<UUID, Double> spentByPlayer = new HashMap<>();
     private double jackpot;
+    private int totalTickets;
+    private long revision;
     private LocalDateTime startedAt = LocalDateTime.now();
 
     public Map<UUID, Integer> getTicketsByPlayer() {
-        return ticketsByPlayer;
+        return Collections.unmodifiableMap(ticketsByPlayer);
     }
 
     public Map<UUID, Double> getSpentByPlayer() {
-        return spentByPlayer;
+        return Collections.unmodifiableMap(spentByPlayer);
     }
 
     public int getTicketsFor(UUID playerId) {
@@ -25,7 +28,16 @@ public final class LotteryRound {
     }
 
     public int getTotalTickets() {
-        return ticketsByPlayer.values().stream().mapToInt(Integer::intValue).sum();
+        return totalTickets;
+    }
+
+    public long getRevision() {
+        return revision;
+    }
+
+    public void setSpentFor(UUID playerId, double amount) {
+        spentByPlayer.put(playerId, amount);
+        revision++;
     }
 
     public int getUniquePlayers() {
@@ -34,6 +46,8 @@ public final class LotteryRound {
 
     public void addTickets(UUID playerId, int amount, double jackpotIncrease) {
         ticketsByPlayer.merge(playerId, amount, Integer::sum);
+        totalTickets += amount;
+        revision++;
         jackpot += jackpotIncrease;
     }
 
@@ -52,6 +66,7 @@ public final class LotteryRound {
 
     public void setJackpot(double jackpot) {
         this.jackpot = Math.max(0.0D, jackpot);
+        revision++;
     }
 
     public LocalDateTime getStartedAt() {
@@ -60,11 +75,14 @@ public final class LotteryRound {
 
     public void setStartedAt(LocalDateTime startedAt) {
         this.startedAt = startedAt;
+        revision++;
     }
 
     public void reset(LocalDateTime now, double jackpotCarryOver) {
         ticketsByPlayer.clear();
         spentByPlayer.clear();
+        totalTickets = 0;
+        revision++;
         jackpot = Math.max(0.0D, jackpotCarryOver);
         startedAt = now;
     }

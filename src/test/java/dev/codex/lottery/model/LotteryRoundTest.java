@@ -39,4 +39,20 @@ class LotteryRoundTest {
         assertEquals(resetTime, round.getStartedAt());
         assertTrue(round.getTicketsByPlayer().isEmpty());
     }
+
+    @Test
+    void restoredTicketsUpdateCounterAndCannotBeMutatedOutsideRound() {
+        LotteryRound round = new LotteryRound();
+        UUID player = UUID.randomUUID();
+        long before = round.getRevision();
+        round.addTickets(player, 100, 0);
+        round.setSpentFor(player, 25000);
+        assertEquals(100, round.getTotalTickets());
+        assertTrue(round.getRevision() > before);
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+            () -> round.getTicketsByPlayer().put(player, 999));
+        round.reset(LocalDateTime.now(), 0);
+        round.addTickets(player, 1, 250);
+        assertEquals(1, round.getTotalTickets());
+    }
 }

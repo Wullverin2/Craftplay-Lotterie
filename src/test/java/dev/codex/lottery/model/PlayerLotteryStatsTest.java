@@ -9,6 +9,24 @@ import org.junit.jupiter.api.Test;
 class PlayerLotteryStatsTest {
 
     @Test
+    void mutationsInvalidateRankingsButRepeatedNameLookupsDoNot() {
+        PlayerLotteryStats stats = new PlayerLotteryStats(UUID.randomUUID(), "Alex");
+        java.util.concurrent.atomic.AtomicInteger changes = new java.util.concurrent.atomic.AtomicInteger();
+        stats.setRankingChangeListener(changes::incrementAndGet);
+        stats.setPlayerName("Alex");
+        assertEquals(0, changes.get());
+        stats.recordPurchase("Alex", 1, 250, LocalDateTime.now());
+        stats.recordWin("Alex", 500, LocalDateTime.now());
+        stats.setWins(5);
+        assertEquals(3, changes.get());
+        assertEquals(3, stats.getRevision());
+        stats.recordConsolationReward("Alex");
+        stats.recordLoss("Alex");
+        assertEquals(3, changes.get());
+        assertEquals(5, stats.getRevision());
+    }
+
+    @Test
     void recordPurchaseAccumulatesTicketsAndMoney() {
         PlayerLotteryStats stats = new PlayerLotteryStats(UUID.randomUUID(), "Alex");
         LocalDateTime now = LocalDateTime.of(2026, 5, 15, 19, 30);

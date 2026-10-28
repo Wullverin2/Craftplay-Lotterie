@@ -224,10 +224,39 @@ In `gui.yml` kann jedes Item eigene Aktionen haben:
 
 Spielerköpfe funktionieren über `material: "PLAYER_HEAD"` mit `skull-owner`, über CMI/PlayerHeads-kompatible Materialien oder über `head-database-id`, wenn HeadDatabase installiert ist. PlaceholderAPI-Platzhalter von CMI, Jobs und Quest-Plugins können in GUI, Lang-Dateien und Befehlen genutzt werden.
 
+## Performance und Speicherung
+
+Ranglisten und Spielerplatzierungen werden gemeinsam für Java-GUI, Bedrock-GUI, Hologramme,
+PlaceholderAPI und Webstatistiken zwischengespeichert. Änderungen an Tickets oder Statistiken
+machen die betroffenen Ergebnisse automatisch ungültig. Pro Menüaufbau wird ein gemeinsamer
+Satz Platzhalter verwendet; statische HeadDatabase-Köpfe und API-Methoden werden wiederverwendet.
+
+Speicheränderungen werden zuerst als kleine, geprüfte Datensätze in `persistence.wal`
+dauerhaft geschrieben. Vollständige YAML-Dateien und die optionale Datenbankspiegelung entstehen
+gebündelt auf einem einzelnen Hintergrundthread. YAML-Dateien werden über temporäre Dateien
+ersetzt. Beim Start wird das Journal automatisch wiederhergestellt; bei Reload und Serverstopp
+wird die Schreibwarteschlange vollständig abgearbeitet. `persistence.wal` gehört zu den
+Serverdaten und darf im laufenden Betrieb nicht gelöscht oder bearbeitet werden.
+
+Vorhandene lokale YAML-Dateien und das Journal bilden den aktuellen Datenstand. Datenbank-Snapshots
+werden nur zum Wiederherstellen fehlender oder leerer Dateien genutzt, damit eine verzögerte
+Datenbankspiegelung keine neueren lokalen Daten überschreibt. Strukturierte SQL-Tabellen erhalten
+nur geänderte oder entfernte Datensätze statt einer kompletten Neuerstellung.
+
+Backups, Audit-ZIPs und Dateiexporte laufen über dieselbe geordnete Warteschlange. Die
+Erfolgsmeldung erscheint nach Fertigstellung. Backups enthalten auch sprachabhaengige Java-
+und Bedrock-GUIs sowie alle Sprachdateien. Bukkit- und Vault-Aktionen verbleiben im Serverthread.
+
+EN: Shared ranking caches avoid repeated sorting across menus, placeholders, holograms and web
+statistics. Durable journal deltas protect saved changes while full YAML checkpoints, incremental
+SQL mirrors, backups and exports run on one background writer. Startup replays the journal;
+reload and shutdown flush all pending writes. Local YAML plus the journal take precedence over
+database snapshots. Keep `persistence.wal` with the server data and do not edit it while running.
+
 ## Build
 
 ```bash
 mvn clean package
 ```
 
-Die fertige Datei liegt danach unter `target/craftplay-lotterie-1.0.0.jar`.
+Die fertige Datei liegt danach unter `target/craftplay-lotterie-1.0.1.jar`.

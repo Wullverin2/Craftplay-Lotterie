@@ -27,6 +27,10 @@ public final class LotteryMenuListener implements Listener {
 
         event.setCancelled(true);
 
+        if (event.getClickedInventory() != event.getView().getTopInventory()) {
+            return;
+        }
+
         if (event.getCurrentItem() == null) {
             return;
         }

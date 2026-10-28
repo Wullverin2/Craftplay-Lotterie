@@ -7,6 +7,8 @@ public final class PlayerLotteryStats {
 
     private final UUID playerId;
     private String playerName;
+    private long revision;
+    private Runnable changeListener = () -> { };
     private int ticketsBought;
     private double moneySpent;
     private int wins;
@@ -28,6 +30,23 @@ public final class PlayerLotteryStats {
         this.playerName = playerName;
     }
 
+    public long getRevision() {
+        return revision;
+    }
+
+    public void setRankingChangeListener(Runnable listener) {
+        changeListener = listener;
+    }
+
+    private void changed() {
+        revision++;
+    }
+
+    private void rankingChanged() {
+        changed();
+        changeListener.run();
+    }
+
     public UUID getPlayerId() {
         return playerId;
     }
@@ -37,7 +56,11 @@ public final class PlayerLotteryStats {
     }
 
     public void setPlayerName(String playerName) {
+        if (java.util.Objects.equals(this.playerName, playerName)) {
+            return;
+        }
         this.playerName = playerName;
+        rankingChanged();
     }
 
     public int getTicketsBought() {
@@ -46,6 +69,7 @@ public final class PlayerLotteryStats {
 
     public void setTicketsBought(int ticketsBought) {
         this.ticketsBought = ticketsBought;
+        rankingChanged();
     }
 
     public double getMoneySpent() {
@@ -54,6 +78,7 @@ public final class PlayerLotteryStats {
 
     public void setMoneySpent(double moneySpent) {
         this.moneySpent = moneySpent;
+        rankingChanged();
     }
 
     public int getWins() {
@@ -62,6 +87,7 @@ public final class PlayerLotteryStats {
 
     public void setWins(int wins) {
         this.wins = wins;
+        rankingChanged();
     }
 
     public double getHighestWin() {
@@ -70,6 +96,7 @@ public final class PlayerLotteryStats {
 
     public void setHighestWin(double highestWin) {
         this.highestWin = highestWin;
+        rankingChanged();
     }
 
     public double getTotalWon() {
@@ -78,6 +105,7 @@ public final class PlayerLotteryStats {
 
     public void setTotalWon(double totalWon) {
         this.totalWon = totalWon;
+        rankingChanged();
     }
 
     public int getRoundsPlayed() {
@@ -86,6 +114,7 @@ public final class PlayerLotteryStats {
 
     public void setRoundsPlayed(int roundsPlayed) {
         this.roundsPlayed = roundsPlayed;
+        rankingChanged();
     }
 
     public int getLosingStreak() {
@@ -94,6 +123,7 @@ public final class PlayerLotteryStats {
 
     public void setLosingStreak(int losingStreak) {
         this.losingStreak = Math.max(0, losingStreak);
+        changed();
     }
 
     public int getBestLosingStreak() {
@@ -102,6 +132,7 @@ public final class PlayerLotteryStats {
 
     public void setBestLosingStreak(int bestLosingStreak) {
         this.bestLosingStreak = Math.max(0, bestLosingStreak);
+        changed();
     }
 
     public int getConsolationRewards() {
@@ -110,6 +141,7 @@ public final class PlayerLotteryStats {
 
     public void setConsolationRewards(int consolationRewards) {
         this.consolationRewards = Math.max(0, consolationRewards);
+        changed();
     }
 
     public int getPityRewards() {
@@ -118,6 +150,7 @@ public final class PlayerLotteryStats {
 
     public void setPityRewards(int pityRewards) {
         this.pityRewards = Math.max(0, pityRewards);
+        changed();
     }
 
     public int getLuckyNumberHits() {
@@ -126,6 +159,7 @@ public final class PlayerLotteryStats {
 
     public void setLuckyNumberHits(int luckyNumberHits) {
         this.luckyNumberHits = Math.max(0, luckyNumberHits);
+        changed();
     }
 
     public int getGiftedTickets() {
@@ -134,6 +168,7 @@ public final class PlayerLotteryStats {
 
     public void setGiftedTickets(int giftedTickets) {
         this.giftedTickets = Math.max(0, giftedTickets);
+        changed();
     }
 
     public double getGiftSpent() {
@@ -142,6 +177,7 @@ public final class PlayerLotteryStats {
 
     public void setGiftSpent(double giftSpent) {
         this.giftSpent = Math.max(0.0D, giftSpent);
+        changed();
     }
 
     public LocalDateTime getLastPurchaseAt() {
@@ -150,6 +186,7 @@ public final class PlayerLotteryStats {
 
     public void setLastPurchaseAt(LocalDateTime lastPurchaseAt) {
         this.lastPurchaseAt = lastPurchaseAt;
+        changed();
     }
 
     public LocalDateTime getLastWinAt() {
@@ -158,6 +195,7 @@ public final class PlayerLotteryStats {
 
     public void setLastWinAt(LocalDateTime lastWinAt) {
         this.lastWinAt = lastWinAt;
+        changed();
     }
 
     public void recordPurchase(String name, int amount, double cost, LocalDateTime now) {
@@ -165,17 +203,20 @@ public final class PlayerLotteryStats {
         ticketsBought += amount;
         moneySpent += cost;
         lastPurchaseAt = now;
+        rankingChanged();
     }
 
     public void recordRoundPlayed(String name) {
         playerName = name;
         roundsPlayed++;
+        rankingChanged();
     }
 
     public void recordLoss(String name) {
         playerName = name;
         losingStreak++;
         bestLosingStreak = Math.max(bestLosingStreak, losingStreak);
+        changed();
     }
 
     public void recordWin(String name, double amount, LocalDateTime now) {
@@ -185,11 +226,13 @@ public final class PlayerLotteryStats {
         highestWin = Math.max(highestWin, amount);
         lastWinAt = now;
         losingStreak = 0;
+        rankingChanged();
     }
 
     public void recordConsolationReward(String name) {
         playerName = name;
         consolationRewards++;
+        changed();
     }
 
     public void recordPityReward(String name, boolean resetStreak) {
@@ -198,16 +241,19 @@ public final class PlayerLotteryStats {
         if (resetStreak) {
             losingStreak = 0;
         }
+        changed();
     }
 
     public void recordLuckyNumberHit(String name) {
         playerName = name;
         luckyNumberHits++;
+        changed();
     }
 
     public void recordGiftPurchase(String name, int amount, double cost) {
         playerName = name;
         giftedTickets += amount;
         giftSpent += cost;
+        changed();
     }
 }
